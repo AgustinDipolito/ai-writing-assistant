@@ -1,40 +1,156 @@
 // ============================================================
 // AI Writing Assistant — Options Page
-// Save/load Gemini API key and test the connection.
+// Multi-provider: Gemini + OpenAI
 // ============================================================
 
-const apiKeyInput = document.getElementById('apiKey');
-const saveBtn = document.getElementById('save');
-const testBtn = document.getElementById('test');
-const toggleBtn = document.getElementById('toggleKey');
-const statusEl = document.getElementById('status');
+// ============================================================
+// 1. PROVIDER REGISTRY (mirrors background.js adapters)
+// ============================================================
 
-// ---- Load existing key ----
+const PROVIDERS = {
+  gemini: {
+    label: 'Gemini',
+    defaultModel: 'gemini-2.0-flash',
+    models: [
+      { value: 'gemini-2.0-flash',      label: 'Gemini 2.0 Flash (recommended)' },
+      { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite (fastest)' },
+      { value: 'gemini-1.5-pro',        label: 'Gemini 1.5 Pro (highest quality)' },
+      { value: 'gemini-1.5-flash',      label: 'Gemini 1.5 Flash' },
+    ],
+  },
+  openai: {
+    label: 'OpenAI',
+    defaultModel: 'gpt-4o-mini',
+    models: [
+      { value: 'gpt-4o-mini',    label: 'GPT-4o Mini (recommended)' },
+      { value: 'gpt-4o',        label: 'GPT-4o (highest quality)' },
+      { value: 'gpt-4-turbo',   label: 'GPT-4 Turbo' },
+      { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (fastest)' },
+    ],
+  },
+};
 
-chrome.storage.local.get('apiKey', ({ apiKey }) => {
-  if (apiKey) {
-    apiKeyInput.value = apiKey;
+// ============================================================
+// 2. DOM REFERENCES
+// ============================================================
+
+const providerSelect     = document.getElementById('providerSelect');
+const apiKeyInputs       = {
+  gemini: document.getElementById('apiKey-gemini'),
+  openai: document.getElementById('apiKey-openai'),
+};
+const providerPanels     = {
+  gemini: document.getElementById('panel-gemini'),
+  openai: document.getElementById('panel-openai'),
+};
+const saveBtn            = document.getElementById('save');
+const testBtn            = document.getElementById('test');
+const statusEl           = document.getElementById('status');
+const modelSelect        = document.getElementById('modelSelect');
+const temperatureSlider  = document.getElementById('temperature');
+const tempValueDisplay   = document.getElementById('tempValue');
+const maxTokensInput     = document.getElementById('maxTokens');
+const responseLanguage   = document.getElementById('responseLanguage');
+const promptGrammar      = document.getElementById('promptGrammar');
+const promptStyle        = document.getElementById('promptStyle');
+const promptSynonyms     = document.getElementById('promptSynonyms');
+const systemInstruction  = document.getElementById('systemInstruction');
+const resetConfigBtn     = document.getElementById('resetConfig');
+const configStatusEl     = document.getElementById('configStatus');
+const configAutoSave     = document.getElementById('configAutoSave');
+const footerProvider     = document.getElementById('footerProvider');
+const footerModel        = document.getElementById('footerModel');
+
+// ============================================================
+// 3. STATUS HELPER
+// ============================================================
+
+function showStatus(type, message, el = statusEl) {
+  el.className = `status ${type}`;
+  el.textContent = message;
+  if (type === 'success') {
+    setTimeout(() => { el.className = 'status'; }, 4000);
   }
+}
+
+// ============================================================
+// 4. PROVIDER PANEL SWITCHING
+// ============================================================
+
+function switchProviderPanel(providerId) {
+  Object.keys(providerPanels).forEach((id) => {
+    providerPanels[id].style.display = id === providerId ? '' : 'none';
+  });
+  populateModelSelect(providerId);
+  updateFooter(providerId);
+}
+
+function populateModelSelect(providerId, selectedModel) {
+  const provider = PROVIDERS[providerId];
+  if (!provider) return;
+  modelSelect.innerHTML = provider.models
+    .map((m) => `<option value="${m.value}"${m.value === (selectedModel || provider.defaultModel) ? ' selected' : ''}>${m.label}</option>`)
+    .join('');
+}
+
+function updateFooter(providerId, model) {
+  const provider = PROVIDERS[providerId];
+  if (!provider) return;
+  footerProvider.textContent = provider.label;
+  footerModel.textContent = model || modelSelect.value || provider.defaultModel;
+}
+
+providerSelect.addEventListener('change', () => {
+  switchProviderPanel(providerSelect.value);
+  autoSaveConfig();
 });
 
-// ---- Save key ----
+// ============================================================
+// 5. SHOW/HIDE KEY VISIBILITY (delegated, works for both panels)
+// ============================================================
+
+document.querySelectorAll('.toggle-visibility[data-target]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const input = document.getElementById(btn.dataset.target);
+    if (!input) return;
+    input.type = input.type === 'password' ? 'text' : 'password';
+    btn.title = input.type === 'password' ? 'Show key' : 'Hide key';
+  });
+});
+
+// ============================================================
+// 6. SAVE KEY
+// ============================================================
 
 saveBtn.addEventListener('click', () => {
-  const apiKey = apiKeyInput.value.trim();
+  const providerId = providerSelect.value;
+  const apiKey = apiKeyInputs[providerId]?.value.trim();
+
   if (!apiKey) {
     showStatus('error', 'Please enter an API key.');
     return;
   }
 
-  chrome.storage.local.set({ apiKey }, () => {
-    showStatus('success', 'API key saved successfully!');
+  chrome.storage.local.get('providerConfig', ({ providerConfig }) => {
+    const pc = providerConfig || { activeProvider: providerId };
+    pc.activeProvider = providerId;
+    if (!pc[providerId]) pc[providerId] = {};
+    pc[providerId].apiKey = apiKey;
+
+    chrome.storage.local.set({ providerConfig: pc }, () => {
+      showStatus('success', `${PROVIDERS[providerId].label} API key saved!`);
+    });
   });
 });
 
-// ---- Test connection ----
+// ============================================================
+// 7. TEST CONNECTION (via background router)
+// ============================================================
 
 testBtn.addEventListener('click', async () => {
-  const apiKey = apiKeyInput.value.trim();
+  const providerId = providerSelect.value;
+  const apiKey = apiKeyInputs[providerId]?.value.trim();
+
   if (!apiKey) {
     showStatus('error', 'Please enter an API key first.');
     return;
@@ -44,92 +160,39 @@ testBtn.addEventListener('click', async () => {
   testBtn.textContent = 'Testing…';
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: 'Say "Connection successful!" in exactly those words.' }] }],
-        generationConfig: { maxOutputTokens: 20 },
-      }),
+    const response = await chrome.runtime.sendMessage({
+      type: 'TEST_CONNECTION',
+      providerId,
+      apiKey,
+      model: modelSelect.value,
     });
 
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({}));
-      throw new Error(err.error?.message || `HTTP ${response.status}`);
-    }
-
-    const data = await response.json();
-    const reply = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-    if (reply) {
-      showStatus('success', `Connected! Gemini says: "${reply.trim().substring(0, 60)}"`);
+    if (response?.error) {
+      showStatus('error', `Connection failed: ${response.error}`);
     } else {
-      showStatus('error', 'Connected but received an empty response.');
+      const reply = (response?.result || '').trim().substring(0, 80);
+      showStatus('success', `Connected! ${PROVIDERS[providerId].label} says: "${reply}"`);
     }
   } catch (err) {
-    showStatus('error', `Connection failed: ${err.message}`);
+    showStatus('error', `Extension error: ${err.message || 'Unknown'}`);
   } finally {
     testBtn.disabled = false;
     testBtn.innerHTML = `
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round">
         <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
         <polyline points="22 4 12 14.01 9 11.01"/>
       </svg>
-      Test Connection
-    `;
+      Test Connection`;
   }
 });
 
-// ---- Toggle key visibility ----
-
-toggleBtn.addEventListener('click', () => {
-  const isPassword = apiKeyInput.type === 'password';
-  apiKeyInput.type = isPassword ? 'text' : 'password';
-  toggleBtn.title = isPassword ? 'Hide key' : 'Show key';
-});
-
-// ---- Status display ----
-
-function showStatus(type, message, el = statusEl) {
-  el.className = `status ${type}`;
-  el.textContent = message;
-
-  if (type === 'success') {
-    setTimeout(() => {
-      el.className = 'status';
-    }, 4000);
-  }
-}
-
 // ============================================================
-// Agent Configuration — Auto-save on every change
+// 8. AGENT CONFIG — gather + auto-save
 // ============================================================
-
-const modelSelect = document.getElementById('modelSelect');
-const temperatureSlider = document.getElementById('temperature');
-const tempValueDisplay = document.getElementById('tempValue');
-const maxTokensInput = document.getElementById('maxTokens');
-const responseLanguage = document.getElementById('responseLanguage');
-const promptGrammar = document.getElementById('promptGrammar');
-const promptStyle = document.getElementById('promptStyle');
-const promptSynonyms = document.getElementById('promptSynonyms');
-const systemInstruction = document.getElementById('systemInstruction');
-const resetConfigBtn = document.getElementById('resetConfig');
-const configStatusEl = document.getElementById('configStatus');
-const configAutoSave = document.getElementById('configAutoSave');
-const footerModel = document.getElementById('footerModel');
-
-const MODEL_LABELS = {
-  'gemini-2.0-flash': 'Gemini 2.0 Flash',
-  'gemini-2.0-flash-lite': 'Gemini 2.0 Flash Lite',
-  'gemini-1.5-pro': 'Gemini 1.5 Pro',
-  'gemini-1.5-flash': 'Gemini 1.5 Flash',
-};
 
 const DEFAULTS = {
-  model: 'gemini-2.0-flash',
+  model: null, // derived from provider
   temperature: 0.4,
   maxTokens: 1500,
   responseLanguage: 'auto',
@@ -139,9 +202,7 @@ const DEFAULTS = {
   systemInstruction: '',
 };
 
-// ---- Gather current config from the form ----
-
-function gatherConfig() {
+function gatherSharedConfig() {
   return {
     model: modelSelect.value,
     temperature: parseFloat(temperatureSlider.value),
@@ -154,29 +215,33 @@ function gatherConfig() {
   };
 }
 
-// ---- Auto-save with debounce ----
-
 let autoSaveTimer = null;
 let autoSaveBadgeTimer = null;
 
 function autoSaveConfig() {
   clearTimeout(autoSaveTimer);
   autoSaveTimer = setTimeout(() => {
-    const config = gatherConfig();
-    footerModel.textContent = MODEL_LABELS[config.model] || config.model;
+    const providerId = providerSelect.value;
+    const shared = gatherSharedConfig();
+    updateFooter(providerId, shared.model);
 
-    chrome.storage.local.set({ agentConfig: config }, () => {
-      // Flash the "Saved" badge
-      configAutoSave.classList.add('show');
-      clearTimeout(autoSaveBadgeTimer);
-      autoSaveBadgeTimer = setTimeout(() => {
-        configAutoSave.classList.remove('show');
-      }, 1800);
+    chrome.storage.local.get('providerConfig', ({ providerConfig }) => {
+      const pc = providerConfig || { activeProvider: providerId };
+      pc.activeProvider = providerId;
+      if (!pc[providerId]) pc[providerId] = {};
+      // Merge shared config into the provider's sub-config (preserve apiKey)
+      Object.assign(pc[providerId], shared);
+
+      chrome.storage.local.set({ providerConfig: pc }, () => {
+        configAutoSave.classList.add('show');
+        clearTimeout(autoSaveBadgeTimer);
+        autoSaveBadgeTimer = setTimeout(() => {
+          configAutoSave.classList.remove('show');
+        }, 1800);
+      });
     });
   }, 400);
 }
-
-// ---- Attach auto-save to all config inputs ----
 
 modelSelect.addEventListener('change', autoSaveConfig);
 temperatureSlider.addEventListener('input', () => {
@@ -190,7 +255,9 @@ promptStyle.addEventListener('input', autoSaveConfig);
 promptSynonyms.addEventListener('input', autoSaveConfig);
 systemInstruction.addEventListener('input', autoSaveConfig);
 
-// ---- Collapsible textareas: expand if they have content ----
+// ============================================================
+// 9. COLLAPSIBLE TEXTAREAS
+// ============================================================
 
 document.querySelectorAll('textarea.collapsible').forEach((ta) => {
   ta.addEventListener('focus', () => ta.classList.add('expanded'));
@@ -206,11 +273,26 @@ function expandCollapsibleIfFilled() {
   });
 }
 
-// ---- Load config ----
+// ============================================================
+// 10. LOAD SAVED CONFIG
+// ============================================================
 
-chrome.storage.local.get('agentConfig', ({ agentConfig }) => {
-  const cfg = agentConfig || DEFAULTS;
-  modelSelect.value = cfg.model || DEFAULTS.model;
+chrome.storage.local.get('providerConfig', ({ providerConfig }) => {
+  const pc = providerConfig || {};
+  const providerId = pc.activeProvider || 'gemini';
+
+  // Set provider selector
+  providerSelect.value = providerId;
+  switchProviderPanel(providerId);
+
+  // Load API keys for all providers
+  Object.keys(apiKeyInputs).forEach((id) => {
+    if (pc[id]?.apiKey) apiKeyInputs[id].value = pc[id].apiKey;
+  });
+
+  // Load shared config from active provider's sub-config
+  const cfg = pc[providerId] || {};
+  populateModelSelect(providerId, cfg.model);
   temperatureSlider.value = cfg.temperature ?? DEFAULTS.temperature;
   tempValueDisplay.textContent = temperatureSlider.value;
   maxTokensInput.value = cfg.maxTokens || DEFAULTS.maxTokens;
@@ -219,14 +301,20 @@ chrome.storage.local.get('agentConfig', ({ agentConfig }) => {
   promptStyle.value = cfg.promptStyle || '';
   promptSynonyms.value = cfg.promptSynonyms || '';
   systemInstruction.value = cfg.systemInstruction || '';
-  footerModel.textContent = MODEL_LABELS[modelSelect.value] || modelSelect.value;
+
+  updateFooter(providerId, cfg.model);
   expandCollapsibleIfFilled();
 });
 
-// ---- Reset defaults ----
+// ============================================================
+// 11. RESET DEFAULTS
+// ============================================================
 
 resetConfigBtn.addEventListener('click', () => {
-  modelSelect.value = DEFAULTS.model;
+  const providerId = providerSelect.value;
+  const provider = PROVIDERS[providerId];
+
+  populateModelSelect(providerId, provider.defaultModel);
   temperatureSlider.value = DEFAULTS.temperature;
   tempValueDisplay.textContent = DEFAULTS.temperature;
   maxTokensInput.value = DEFAULTS.maxTokens;
@@ -237,20 +325,31 @@ resetConfigBtn.addEventListener('click', () => {
   systemInstruction.value = '';
   expandCollapsibleIfFilled();
 
-  chrome.storage.local.set({ agentConfig: DEFAULTS }, () => {
-    footerModel.textContent = MODEL_LABELS[DEFAULTS.model];
-    showStatus('success', 'Reset to defaults!', configStatusEl);
+  const resetCfg = {
+    model: provider.defaultModel,
+    ...DEFAULTS,
+  };
+
+  chrome.storage.local.get('providerConfig', ({ providerConfig }) => {
+    const pc = providerConfig || { activeProvider: providerId };
+    if (!pc[providerId]) pc[providerId] = {};
+    const savedKey = pc[providerId].apiKey;
+    pc[providerId] = { ...resetCfg, apiKey: savedKey };
+    chrome.storage.local.set({ providerConfig: pc }, () => {
+      updateFooter(providerId, provider.defaultModel);
+      showStatus('success', 'Reset to defaults!', configStatusEl);
+    });
   });
 });
 
 // ============================================================
-// Custom Actions
+// 12. CUSTOM ACTIONS (unchanged logic)
 // ============================================================
 
-const customActionsList = document.getElementById('customActionsList');
-const addCustomActionBtn = document.getElementById('addCustomAction');
-const saveCustomActionsBtn = document.getElementById('saveCustomActions');
-const customActionsStatusEl = document.getElementById('customActionsStatus');
+const customActionsList       = document.getElementById('customActionsList');
+const addCustomActionBtn      = document.getElementById('addCustomAction');
+const saveCustomActionsBtn    = document.getElementById('saveCustomActions');
+const customActionsStatusEl   = document.getElementById('customActionsStatus');
 
 const ICON_OPTIONS = ['✏️', '🔍', '📝', '💡', '🎯', '📐', '🧩', '🌐', '⚡', '📖', '🛠️', '🔄'];
 
@@ -295,11 +394,11 @@ function renderActionCards() {
 }
 
 function escapeAttr(str) {
-  return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return str.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function escapeHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 function syncCardsToData() {
@@ -312,49 +411,32 @@ function syncCardsToData() {
   });
 }
 
-// ---- Add action ----
-
 addCustomActionBtn.addEventListener('click', () => {
   syncCardsToData();
-  customActions.push({
-    id: generateId(),
-    name: '',
-    icon: '✏️',
-    prompt: '',
-  });
+  customActions.push({ id: generateId(), name: '', icon: '✏️', prompt: '' });
   renderActionCards();
-  // Scroll to new card
   const lastCard = customActionsList.querySelector('.custom-action-card:last-child');
   if (lastCard) lastCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 });
-
-// ---- Remove action & icon selection (delegated) ----
 
 customActionsList.addEventListener('click', (e) => {
   const removeBtn = e.target.closest('.btn-remove');
   if (removeBtn) {
     syncCardsToData();
-    const idx = parseInt(removeBtn.dataset.index, 10);
-    customActions.splice(idx, 1);
+    customActions.splice(parseInt(removeBtn.dataset.index, 10), 1);
     renderActionCards();
     return;
   }
-
   const iconBtn = e.target.closest('.icon-choice');
   if (iconBtn) {
     syncCardsToData();
-    const idx = parseInt(iconBtn.dataset.index, 10);
-    customActions[idx].icon = iconBtn.dataset.icon;
+    customActions[parseInt(iconBtn.dataset.index, 10)].icon = iconBtn.dataset.icon;
     renderActionCards();
   }
 });
 
-// ---- Save custom actions ----
-
 saveCustomActionsBtn.addEventListener('click', () => {
   syncCardsToData();
-
-  // Validate
   for (let i = 0; i < customActions.length; i++) {
     if (!customActions[i].name) {
       showStatus('error', `Action #${i + 1} needs a name.`, customActionsStatusEl);
@@ -365,13 +447,10 @@ saveCustomActionsBtn.addEventListener('click', () => {
       return;
     }
   }
-
   chrome.storage.local.set({ customActions }, () => {
     showStatus('success', `${customActions.length} custom action(s) saved!`, customActionsStatusEl);
   });
 });
-
-// ---- Load custom actions ----
 
 chrome.storage.local.get('customActions', ({ customActions: saved }) => {
   customActions = saved || [];
