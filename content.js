@@ -19,6 +19,8 @@
       return normalized.length > maxLength ? normalized.substring(0, maxLength) : normalized;
     },
     getInputSelection: () => null,
+    getInputSelectionSnapshot: () => null,
+    applyInputSelectionSnapshot: () => false,
     rectFromPoint: (x, y) => ({
       top: y,
       bottom: y,
@@ -39,6 +41,7 @@
     synonyms: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>`,
     close: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`,
     copy: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
+    apply: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
     stop: `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>`,
     sparkle: `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0L14.59 8.41L23 11L14.59 13.59L12 22L9.41 13.59L1 11L9.41 8.41L12 0Z"/></svg>`,
   };
@@ -71,6 +74,7 @@
     .ai-results-actions { display: flex; align-items: center; gap: 4px; }
     .ai-icon-btn { all: unset; display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; color: #64748b; transition: background 0.15s, color 0.15s; }
     .ai-icon-btn:hover { background: #f1f5f9; color: #1e293b; }
+    .ai-icon-btn:disabled { opacity: 0.45; cursor: not-allowed; pointer-events: none; }
     .ai-results-body { padding: 14px; overflow-y: auto; flex: 1; font-size: 13.5px; line-height: 1.65; color: #1e293b; }
     .ai-results-body p { margin-bottom: 10px; }
     .ai-results-body strong, .ai-results-body b { font-weight: 600; color: #0f172a; }
@@ -131,6 +135,7 @@
       <div class="ai-results-actions">
         <div class="ai-copy-toast">Copied!</div>
         <button class="ai-icon-btn" data-role="stop" title="Stop" style="display:none;">${ICONS.stop}</button>
+        <button class="ai-icon-btn" data-role="apply" title="Apply result" disabled>${ICONS.apply}</button>
         <button class="ai-icon-btn" data-role="copy" title="Copy result">${ICONS.copy}</button>
         <button class="ai-icon-btn" data-role="close" title="Close">${ICONS.close}</button>
       </div>
@@ -145,6 +150,7 @@
   const resultsTitleText = results.querySelector('.ai-results-title-text');
   const copyToast = results.querySelector('.ai-copy-toast');
   const stopBtn = results.querySelector('[data-role="stop"]');
+  const applyBtn = results.querySelector('[data-role="apply"]');
 
   let loadedCustomActions = [];
   let selectedText = '';
@@ -153,8 +159,132 @@
   let streamPort = null;
   let activeRequestId = null;
   let activeResponseText = '';
+  let selectionSnapshotForApply = null;
   let lastAnchorRect = null;
   let lastMousePoint = { x: Math.round(window.innerWidth / 2), y: Math.max(48, Math.round(window.innerHeight * 0.12)) };
+
+  function isEditableElement(node) {
+    if (!(node instanceof Element)) return false;
+    return Boolean(node.closest('[contenteditable]:not([contenteditable="false"])'));
+  }
+
+  function normalizeSelectionSnapshot(snapshot) {
+    if (!snapshot || !snapshot.source) return null;
+    return snapshot;
+  }
+
+  function captureSelectionSnapshot() {
+    const inputSnapshot = normalizeSelectionSnapshot(
+      SelectionUtils.getInputSelectionSnapshot(document.activeElement, MAX_TEXT_LENGTH)
+    );
+
+    if (inputSnapshot) {
+      return inputSnapshot;
+    }
+
+    const selection = window.getSelection();
+    if (!selection?.rangeCount) return null;
+
+    const text = SelectionUtils.clampText(selection.toString() || '', MAX_TEXT_LENGTH);
+    if (!text) return null;
+
+    let range;
+    try {
+      range = selection.getRangeAt(0);
+    } catch {
+      return null;
+    }
+
+    const commonContainer = range.commonAncestorContainer;
+    const ownerElement = commonContainer instanceof Element ? commonContainer : commonContainer?.parentElement;
+    if (!ownerElement || !isEditableElement(ownerElement)) {
+      return null;
+    }
+
+    return {
+      source: 'contenteditable',
+      target: ownerElement.closest('[contenteditable]:not([contenteditable="false"])'),
+      range: range.cloneRange(),
+      text,
+    };
+  }
+
+  function setToast(message) {
+    copyToast.textContent = message;
+    copyToast.classList.add('show');
+    setTimeout(() => copyToast.classList.remove('show'), 1500);
+  }
+
+  function applyTextToContentEditable(snapshot, replacementText) {
+    const target = snapshot?.target;
+    const sourceRange = snapshot?.range;
+    if (!target || !sourceRange || !target.isConnected) return false;
+
+    const selection = window.getSelection();
+    if (!selection) return false;
+
+    let range;
+    try {
+      range = sourceRange.cloneRange();
+    } catch {
+      return false;
+    }
+
+    try {
+      selection.removeAllRanges();
+      selection.addRange(range);
+    } catch {
+      return false;
+    }
+
+    if (typeof document.execCommand === 'function') {
+      const inserted = document.execCommand('insertText', false, replacementText);
+      if (inserted) return true;
+    }
+
+    range.deleteContents();
+    const textNode = document.createTextNode(replacementText);
+    range.insertNode(textNode);
+    range.setStartAfter(textNode);
+    range.setEndAfter(textNode);
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return true;
+  }
+
+  function applyResultToSelection() {
+    const content = activeResponseText.trim();
+    if (!content) {
+      showError('No AI result available to apply yet.');
+      return;
+    }
+
+    if (!selectionSnapshotForApply) {
+      showError('Original selection is no longer available. Please select text again.');
+      return;
+    }
+
+    let applied = false;
+
+    if (selectionSnapshotForApply.source === 'input' || selectionSnapshotForApply.source === 'textarea') {
+      applied = SelectionUtils.applyInputSelectionSnapshot(selectionSnapshotForApply, content);
+    } else if (selectionSnapshotForApply.source === 'contenteditable') {
+      applied = applyTextToContentEditable(selectionSnapshotForApply, content);
+    }
+
+    if (!applied) {
+      showError('Could not apply the result to the original selection. Please try again.');
+      return;
+    }
+
+    setToast('Applied!');
+  }
+
+  function updateApplyButtonState() {
+    if (!applyBtn) return;
+    const canApply = !isLoading && Boolean(activeResponseText.trim()) && Boolean(selectionSnapshotForApply);
+    applyBtn.disabled = !canApply;
+  }
 
   function buildMenuButtons() {
     const defaultButtons = [
@@ -535,6 +665,13 @@
     return getSelectionPayload().text.length > 1;
   }
 
+  function hideMenuWhenSelectionMissing() {
+    if (!menu.classList.contains('visible')) return;
+    if (hasActiveSelectionText()) return;
+    selectedText = '';
+    hideMenu();
+  }
+
   function showMenu(rect) {
     // Never wipe the results panel if a response is active.
     if (!isLoading && !results.classList.contains('visible')) {
@@ -551,6 +688,7 @@
   function hideResults() {
     results.classList.remove('visible');
     resultsBody.innerHTML = '';
+    updateApplyButtonState();
   }
 
   function clearSelectionUi() {
@@ -573,6 +711,9 @@
     isLoading = false;
     setButtonsDisabled(false);
     stopBtn.style.display = 'none';
+    selectionSnapshotForApply = null;
+    activeResponseText = '';
+    updateApplyButtonState();
     lastAnchorRect = null;
   }
 
@@ -635,6 +776,7 @@
 
     resultsTitleText.textContent = title || 'AI Suggestion';
     resultsBody.innerHTML = renderSafeMarkdown(content);
+    updateApplyButtonState();
     repositionResults();
   }
 
@@ -670,6 +812,7 @@
       if (message.phase === 'delta') {
         activeResponseText += message.delta || '';
         resultsBody.innerHTML = renderSafeMarkdown(activeResponseText);
+        updateApplyButtonState();
         return;
       }
 
@@ -683,6 +826,7 @@
         setButtonsDisabled(false);
         activeRequestId = null;
         stopBtn.style.display = 'none';
+        updateApplyButtonState();
         return;
       }
 
@@ -693,6 +837,7 @@
         setButtonsDisabled(false);
         activeRequestId = null;
         stopBtn.style.display = 'none';
+        updateApplyButtonState();
         return;
       }
 
@@ -703,6 +848,7 @@
         setButtonsDisabled(false);
         activeRequestId = null;
         stopBtn.style.display = 'none';
+        updateApplyButtonState();
       }
     });
 
@@ -713,6 +859,7 @@
         isLoading = false;
         setButtonsDisabled(false);
         activeRequestId = null;
+        updateApplyButtonState();
       }
     });
 
@@ -724,6 +871,7 @@
       activeRequestId = null;
       isLoading = false;
       setButtonsDisabled(false);
+      updateApplyButtonState();
       return;
     }
 
@@ -736,6 +884,7 @@
     activeRequestId = null;
     isLoading = false;
     setButtonsDisabled(false);
+    updateApplyButtonState();
   }
 
   async function requestAI(action, textOverride, anchorRectOverride) {
@@ -749,6 +898,8 @@
     isLoading = true;
     setButtonsDisabled(true);
     activeResponseText = '';
+    selectionSnapshotForApply = captureSelectionSnapshot();
+    updateApplyButtonState();
 
     // Capture the anchor rect BEFORE hiding the menu (hidden elements return zero rect).
     const anchorRect = anchorRectOverride || menu.getBoundingClientRect();
@@ -798,6 +949,13 @@
     }, 10);
   });
 
+  document.addEventListener('keyup', () => {
+    if (Date.now() < suppressUiUntil) return;
+    if (isLoading) return;
+    if (results.classList.contains('visible')) return;
+    hideMenuWhenSelectionMissing();
+  });
+
   menu.addEventListener('click', (e) => {
     const button = getClickedButton(e, '.ai-menu-btn');
     if (!button || button.classList.contains('disabled')) return;
@@ -831,9 +989,13 @@
     if (role === 'copy') {
       const text = resultsBody.innerText;
       navigator.clipboard.writeText(text).then(() => {
-        copyToast.classList.add('show');
-        setTimeout(() => copyToast.classList.remove('show'), 1500);
+        setToast('Copied!');
       }).catch(() => {});
+      return;
+    }
+
+    if (role === 'apply') {
+      applyResultToSelection();
     }
   });
 
@@ -841,6 +1003,10 @@
     if (hostEl.contains(e.target) || e.target === hostEl) return;
     // Never close via mousedown while a request is loading.
     if (isLoading) return;
+
+    // Clicking anywhere outside should immediately dismiss action buttons.
+    // If the user keeps a valid selection, mouseup/selectionchange can re-open it.
+    hideMenu();
 
     if (results.classList.contains('visible') || menu.classList.contains('visible')) {
       setTimeout(() => {
@@ -888,13 +1054,20 @@
         return;
       }
 
-      if (!hasActiveSelectionText()) {
+      hideMenuWhenSelectionMissing();
+
+      if (!hasActiveSelectionText() && !results.classList.contains('visible')) {
         clearSelectionUi();
       }
     }, 250);
   });
 
   chrome.runtime.onMessage.addListener((message) => {
+    if (message?.type === 'FORCE_HIDE_UI') {
+      handleFocusLoss();
+      return false;
+    }
+
     if (message?.type !== 'CONTEXT_ACTION_TRIGGER') return false;
 
     const text = String(message.text || '').trim();

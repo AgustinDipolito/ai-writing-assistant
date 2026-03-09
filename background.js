@@ -8,6 +8,8 @@ const CONTEXT_ROOT_ID = 'awa_root';
 const CONTEXT_ACTION_PREFIX = 'awa_action:';
 
 const activeStreams = new Map();
+const activeTabByWindow = new Map();
+let lastFocusedWindowId = null;
 
 const LANGUAGE_INSTRUCTIONS = {
   auto: 'Respond in the SAME language as the input text.',
@@ -417,7 +419,71 @@ async function resolveActiveConfig() {
   return { adapter: geminiAdapter, apiKey, config: storage.agentConfig || {}, providerId: 'gemini' };
 }
 
-async function resolvePrompt(action, text, config) {
+function coerceTemperature(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return Math.max(0, Math.min(1, numeric));
+}
+
+function coerceMaxTokens(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return null;
+  return Math.max(100, Math.min(8000, Math.round(numeric)));
+}
+
+function normalizeActionOverride(override) {
+  if (!override || typeof override !== 'object') return {};
+
+  const normalized = {};
+  if (typeof override.model === 'string' && override.model.trim()) {
+    normalized.model = override.model.trim();
+  }
+
+  const temperature = coerceTemperature(override.temperature);
+  if (temperature !== null) {
+    normalized.temperature = temperature;
+  }
+
+  const maxTokens = coerceMaxTokens(override.maxTokens);
+  if (maxTokens !== null) {
+    normalized.maxTokens = maxTokens;
+  }
+
+  return normalized;
+}
+
+function resolveActionOverride(action, providerConfig, customAction, providerId) {
+  if (action.startsWith('custom_')) {
+    if (!customAction) return {};
+
+    const fromProviderScoped = customAction.overrides?.[providerId];
+    if (fromProviderScoped && typeof fromProviderScoped === 'object') {
+      return normalizeActionOverride(fromProviderScoped);
+    }
+
+    if (customAction.overrides && typeof customAction.overrides === 'object') {
+      return normalizeActionOverride(customAction.overrides);
+    }
+
+    return {};
+  }
+
+  const baseOverrides = providerConfig?.actionOverrides;
+  if (!baseOverrides || typeof baseOverrides !== 'object') return {};
+
+  return normalizeActionOverride(baseOverrides[action]);
+}
+
+function buildRuntimeConfig(action, providerConfig, customAction, providerId) {
+  const runtimeConfig = { ...providerConfig };
+  const override = resolveActionOverride(action, providerConfig, customAction, providerId);
+  if (Object.keys(override).length) {
+    Object.assign(runtimeConfig, override);
+  }
+  return runtimeConfig;
+}
+
+async function resolvePromptAndConfig(action, text, config, providerId) {
   const isCustomAction = action.startsWith('custom_');
 
   if (!DEFAULT_PROMPTS[action] && !isCustomAction) {
@@ -427,7 +493,9 @@ async function resolvePrompt(action, text, config) {
   const trimmedText = text.length > 5000 ? text.substring(0, 5000) + '…' : text;
 
   if (!isCustomAction) {
-    return buildPrompt(action, trimmedText, config);
+    const runtimeConfig = buildRuntimeConfig(action, config, null, providerId);
+    const prompt = buildPrompt(action, trimmedText, runtimeConfig);
+    return { prompt, runtimeConfig };
   }
 
   const storage = await chrome.storage.local.get('customActions');
@@ -438,7 +506,9 @@ async function resolvePrompt(action, text, config) {
     throw new Error('Custom action not found. It may have been deleted.');
   }
 
-  return buildCustomPrompt(customAction.prompt, trimmedText, config);
+  const runtimeConfig = buildRuntimeConfig(action, config, customAction, providerId);
+  const prompt = buildCustomPrompt(customAction.prompt, trimmedText, runtimeConfig);
+  return { prompt, runtimeConfig };
 }
 
 function emitStream(port, requestId, payload) {
@@ -453,6 +523,40 @@ function emitStream(port, requestId, payload) {
   }
 }
 
+function notifyTabToHideUi(tabId) {
+  if (typeof tabId !== 'number') return;
+  chrome.tabs.sendMessage(tabId, { type: 'FORCE_HIDE_UI' }, () => {
+    chrome.runtime.lastError;
+  });
+}
+
+function rememberActiveTab(windowId, tabId) {
+  if (typeof windowId !== 'number' || typeof tabId !== 'number') return;
+  activeTabByWindow.set(windowId, tabId);
+}
+
+function syncActiveTabForWindow(windowId) {
+  if (typeof windowId !== 'number' || windowId < 0) return;
+  chrome.tabs.query({ active: true, windowId }, (tabs) => {
+    if (chrome.runtime.lastError) return;
+    const tabId = tabs?.[0]?.id;
+    if (typeof tabId === 'number') {
+      rememberActiveTab(windowId, tabId);
+    }
+  });
+}
+
+function initializeActiveTabMap() {
+  chrome.tabs.query({ active: true }, (tabs) => {
+    if (chrome.runtime.lastError || !Array.isArray(tabs)) return;
+    tabs.forEach((tab) => {
+      if (typeof tab.windowId === 'number' && typeof tab.id === 'number') {
+        rememberActiveTab(tab.windowId, tab.id);
+      }
+    });
+  });
+}
+
 async function runStream(port, requestId, action, text) {
   const existing = activeStreams.get(requestId);
   if (existing?.controller) {
@@ -464,7 +568,7 @@ async function runStream(port, requestId, action, text) {
 
   try {
     const { adapter, apiKey, config, providerId } = await resolveActiveConfig();
-    const prompt = await resolvePrompt(action, text, config);
+    const { prompt, runtimeConfig } = await resolvePromptAndConfig(action, text, config, providerId);
 
     emitStream(port, requestId, { phase: 'start', provider: providerId, action });
 
@@ -473,20 +577,20 @@ async function runStream(port, requestId, action, text) {
       completeText = await adapter.stream(
         prompt,
         apiKey,
-        config,
+        runtimeConfig,
         (delta) => emitStream(port, requestId, { phase: 'delta', delta, provider: providerId, action }),
         abortController.signal
       );
 
       // Fallback for providers/environments where streaming yields no deltas.
       if (!completeText?.trim()) {
-        completeText = await adapter.call(prompt, apiKey, config);
+        completeText = await adapter.call(prompt, apiKey, runtimeConfig);
         if (completeText) {
           emitStream(port, requestId, { phase: 'delta', delta: completeText, provider: providerId, action });
         }
       }
     } else {
-      completeText = await adapter.call(prompt, apiKey, config);
+      completeText = await adapter.call(prompt, apiKey, runtimeConfig);
       emitStream(port, requestId, { phase: 'delta', delta: completeText, provider: providerId, action });
     }
 
@@ -571,9 +675,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   (async () => {
     try {
-      const { adapter, apiKey, config } = await resolveActiveConfig();
-      const prompt = await resolvePrompt(action, text, config);
-      const result = await adapter.call(prompt, apiKey, config);
+      const { adapter, apiKey, config, providerId } = await resolveActiveConfig();
+      const { prompt, runtimeConfig } = await resolvePromptAndConfig(action, text, config, providerId);
+      const result = await adapter.call(prompt, apiKey, runtimeConfig);
       sendResponse({ result });
     } catch (err) {
       sendResponse({ error: err.message || 'An unexpected error occurred.' });
@@ -626,12 +730,47 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
   });
 });
 
+chrome.tabs.onActivated.addListener(({ tabId, windowId }) => {
+  const previousTabId = activeTabByWindow.get(windowId);
+  if (typeof previousTabId === 'number' && previousTabId !== tabId) {
+    notifyTabToHideUi(previousTabId);
+  }
+
+  rememberActiveTab(windowId, tabId);
+  lastFocusedWindowId = windowId;
+});
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  for (const [windowId, activeTabId] of activeTabByWindow.entries()) {
+    if (activeTabId === tabId) {
+      activeTabByWindow.delete(windowId);
+    }
+  }
+});
+
+chrome.windows.onFocusChanged.addListener((windowId) => {
+  if (windowId === chrome.windows.WINDOW_ID_NONE) {
+    if (typeof lastFocusedWindowId === 'number') {
+      notifyTabToHideUi(activeTabByWindow.get(lastFocusedWindowId));
+    }
+    return;
+  }
+
+  if (typeof lastFocusedWindowId === 'number' && lastFocusedWindowId !== windowId) {
+    notifyTabToHideUi(activeTabByWindow.get(lastFocusedWindowId));
+  }
+
+  lastFocusedWindowId = windowId;
+  syncActiveTabForWindow(windowId);
+});
+
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== 'local') return;
   if (changes.customActions) rebuildContextMenus().catch(() => {});
 });
 
 chrome.runtime.onInstalled.addListener((details) => {
+  initializeActiveTabMap();
   rebuildContextMenus().catch(() => {});
 
   if (details.reason === 'install') {
@@ -640,5 +779,6 @@ chrome.runtime.onInstalled.addListener((details) => {
 });
 
 chrome.runtime.onStartup.addListener(() => {
+  initializeActiveTabMap();
   rebuildContextMenus().catch(() => {});
 });

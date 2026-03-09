@@ -6,6 +6,8 @@ const {
   rectFromPoint,
   isZeroRect,
   getInputSelection,
+  getInputSelectionSnapshot,
+  applyInputSelectionSnapshot,
 } = require('../selection-utils.js');
 
 test('clampText trims and limits by max length', () => {
@@ -83,4 +85,47 @@ test('getInputSelection returns null for non-text elements or collapsed selectio
 
   assert.equal(getInputSelection(nonTextInput, 5000), null);
   assert.equal(getInputSelection(collapsed, 5000), null);
+});
+
+test('getInputSelectionSnapshot returns metadata for replacement', () => {
+  const activeElement = {
+    tagName: 'TEXTAREA',
+    value: 'alpha beta gamma',
+    selectionStart: 6,
+    selectionEnd: 10,
+    getBoundingClientRect: () => ({ left: 10, top: 20, width: 300, height: 60 }),
+  };
+
+  const snapshot = getInputSelectionSnapshot(activeElement, 5000);
+  assert.ok(snapshot);
+  assert.equal(snapshot.source, 'textarea');
+  assert.equal(snapshot.start, 6);
+  assert.equal(snapshot.end, 10);
+  assert.equal(snapshot.text, 'beta');
+});
+
+test('applyInputSelectionSnapshot replaces selected range and emits events', () => {
+  const emitted = [];
+  const target = {
+    value: 'hello brave world',
+    setSelectionRange(start, end) {
+      this.selectionStart = start;
+      this.selectionEnd = end;
+    },
+    dispatchEvent(event) {
+      emitted.push(event.type);
+      return true;
+    },
+  };
+
+  const ok = applyInputSelectionSnapshot(
+    { source: 'input', target, start: 6, end: 11 },
+    'wonderful'
+  );
+
+  assert.equal(ok, true);
+  assert.equal(target.value, 'hello wonderful world');
+  assert.deepEqual(emitted, ['input', 'change']);
+  assert.equal(target.selectionStart, 15);
+  assert.equal(target.selectionEnd, 15);
 });

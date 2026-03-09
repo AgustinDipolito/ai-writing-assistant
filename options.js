@@ -60,6 +60,24 @@ const configStatusEl     = document.getElementById('configStatus');
 const configAutoSave     = document.getElementById('configAutoSave');
 const footerProvider     = document.getElementById('footerProvider');
 const footerModel        = document.getElementById('footerModel');
+const ACTION_IDS         = ['grammar', 'style', 'synonyms'];
+const baseOverrideInputs = {
+  grammar: {
+    model: document.getElementById('overrideModel-grammar'),
+    temperature: document.getElementById('overrideTemp-grammar'),
+    maxTokens: document.getElementById('overrideTokens-grammar'),
+  },
+  style: {
+    model: document.getElementById('overrideModel-style'),
+    temperature: document.getElementById('overrideTemp-style'),
+    maxTokens: document.getElementById('overrideTokens-style'),
+  },
+  synonyms: {
+    model: document.getElementById('overrideModel-synonyms'),
+    temperature: document.getElementById('overrideTemp-synonyms'),
+    maxTokens: document.getElementById('overrideTokens-synonyms'),
+  },
+};
 
 // ============================================================
 // 3. STATUS HELPER
@@ -82,6 +100,8 @@ function switchProviderPanel(providerId) {
     providerPanels[id].style.display = id === providerId ? '' : 'none';
   });
   populateModelSelect(providerId);
+  populateBaseOverrideModelSelects(providerId);
+  renderActionCards();
   updateFooter(providerId);
 }
 
@@ -98,6 +118,27 @@ function updateFooter(providerId, model) {
   if (!provider) return;
   footerProvider.textContent = provider.label;
   footerModel.textContent = model || modelSelect.value || provider.defaultModel;
+}
+
+function buildModelOptions(providerId, selectedModel, includeGlobalOption = false) {
+  const provider = PROVIDERS[providerId];
+  if (!provider) return includeGlobalOption ? '<option value="">Use global model</option>' : '';
+
+  const head = includeGlobalOption ? '<option value="">Use global model</option>' : '';
+  const options = provider.models
+    .map((m) => `<option value="${m.value}"${m.value === selectedModel ? ' selected' : ''}>${m.label}</option>`)
+    .join('');
+
+  return head + options;
+}
+
+function populateBaseOverrideModelSelects(providerId) {
+  ACTION_IDS.forEach((actionId) => {
+    const select = baseOverrideInputs[actionId]?.model;
+    if (!select) return;
+    const currentValue = select.value || '';
+    select.innerHTML = buildModelOptions(providerId, currentValue, true);
+  });
 }
 
 providerSelect.addEventListener('change', () => {
@@ -202,6 +243,52 @@ const DEFAULTS = {
   systemInstruction: '',
 };
 
+function parseOptionalNumber(value, min, max) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return undefined;
+  const numeric = Number(raw);
+  if (!Number.isFinite(numeric)) return undefined;
+  return Math.min(max, Math.max(min, numeric));
+}
+
+function gatherBaseActionOverrides() {
+  const overrides = {};
+
+  ACTION_IDS.forEach((actionId) => {
+    const actionInputs = baseOverrideInputs[actionId];
+    if (!actionInputs) return;
+
+    const actionOverride = {};
+    const model = actionInputs.model?.value?.trim();
+    const temperature = parseOptionalNumber(actionInputs.temperature?.value, 0, 1);
+    const maxTokens = parseOptionalNumber(actionInputs.maxTokens?.value, 100, 8000);
+
+    if (model) actionOverride.model = model;
+    if (typeof temperature === 'number') actionOverride.temperature = Number(temperature.toFixed(2));
+    if (typeof maxTokens === 'number') actionOverride.maxTokens = Math.round(maxTokens);
+
+    if (Object.keys(actionOverride).length > 0) {
+      overrides[actionId] = actionOverride;
+    }
+  });
+
+  return overrides;
+}
+
+function setBaseActionOverridesInForm(providerId, actionOverrides = {}) {
+  populateBaseOverrideModelSelects(providerId);
+
+  ACTION_IDS.forEach((actionId) => {
+    const actionInputs = baseOverrideInputs[actionId];
+    const override = actionOverrides[actionId] || {};
+    if (!actionInputs) return;
+
+    actionInputs.model.value = override.model || '';
+    actionInputs.temperature.value = override.temperature ?? '';
+    actionInputs.maxTokens.value = override.maxTokens ?? '';
+  });
+}
+
 function gatherSharedConfig() {
   return {
     model: modelSelect.value,
@@ -212,6 +299,7 @@ function gatherSharedConfig() {
     promptStyle: promptStyle.value.trim(),
     promptSynonyms: promptSynonyms.value.trim(),
     systemInstruction: systemInstruction.value.trim(),
+    actionOverrides: gatherBaseActionOverrides(),
   };
 }
 
@@ -254,6 +342,13 @@ promptGrammar.addEventListener('input', autoSaveConfig);
 promptStyle.addEventListener('input', autoSaveConfig);
 promptSynonyms.addEventListener('input', autoSaveConfig);
 systemInstruction.addEventListener('input', autoSaveConfig);
+ACTION_IDS.forEach((actionId) => {
+  const inputs = baseOverrideInputs[actionId];
+  if (!inputs) return;
+  inputs.model.addEventListener('change', autoSaveConfig);
+  inputs.temperature.addEventListener('input', autoSaveConfig);
+  inputs.maxTokens.addEventListener('input', autoSaveConfig);
+});
 
 // ============================================================
 // 9. COLLAPSIBLE TEXTAREAS
@@ -301,6 +396,7 @@ chrome.storage.local.get('providerConfig', ({ providerConfig }) => {
   promptStyle.value = cfg.promptStyle || '';
   promptSynonyms.value = cfg.promptSynonyms || '';
   systemInstruction.value = cfg.systemInstruction || '';
+  setBaseActionOverridesInForm(providerId, cfg.actionOverrides || {});
 
   updateFooter(providerId, cfg.model);
   expandCollapsibleIfFilled();
@@ -323,6 +419,7 @@ resetConfigBtn.addEventListener('click', () => {
   promptStyle.value = '';
   promptSynonyms.value = '';
   systemInstruction.value = '';
+  setBaseActionOverridesInForm(providerId, {});
   expandCollapsibleIfFilled();
 
   const resetCfg = {
@@ -334,7 +431,7 @@ resetConfigBtn.addEventListener('click', () => {
     const pc = providerConfig || { activeProvider: providerId };
     if (!pc[providerId]) pc[providerId] = {};
     const savedKey = pc[providerId].apiKey;
-    pc[providerId] = { ...resetCfg, apiKey: savedKey };
+    pc[providerId] = { ...resetCfg, apiKey: savedKey, actionOverrides: {} };
     chrome.storage.local.set({ providerConfig: pc }, () => {
       updateFooter(providerId, provider.defaultModel);
       showStatus('success', 'Reset to defaults!', configStatusEl);
@@ -343,7 +440,7 @@ resetConfigBtn.addEventListener('click', () => {
 });
 
 // ============================================================
-// 12. CUSTOM ACTIONS (unchanged logic)
+// 12. CUSTOM ACTIONS
 // ============================================================
 
 const customActionsList       = document.getElementById('customActionsList');
@@ -359,11 +456,45 @@ function generateId() {
   return 'custom_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7);
 }
 
+function normalizeCustomAction(action) {
+  const normalized = {
+    id: action?.id || generateId(),
+    name: String(action?.name || ''),
+    icon: action?.icon || '✏️',
+    prompt: String(action?.prompt || ''),
+    overrides: {},
+  };
+
+  if (action?.overrides && typeof action.overrides === 'object') {
+    if (action.overrides.gemini || action.overrides.openai) {
+      normalized.overrides = {
+        gemini: action.overrides.gemini || {},
+        openai: action.overrides.openai || {},
+      };
+    } else {
+      normalized.overrides = {
+        gemini: action.overrides,
+        openai: {},
+      };
+    }
+  }
+
+  return normalized;
+}
+
+function getCustomActionOverride(action, providerId) {
+  if (!action?.overrides || typeof action.overrides !== 'object') return {};
+  const override = action.overrides[providerId];
+  return override && typeof override === 'object' ? override : {};
+}
+
 function renderActionCards() {
   if (customActions.length === 0) {
     customActionsList.innerHTML = '<div class="empty-state">No custom actions yet. Click the button below to add one.</div>';
     return;
   }
+
+  const providerId = providerSelect.value;
 
   customActionsList.innerHTML = customActions.map((action, index) => `
     <div class="custom-action-card" data-index="${index}">
@@ -388,6 +519,25 @@ function renderActionCards() {
           <label>Prompt Template</label>
           <textarea class="action-prompt" placeholder="Write your prompt here. Use {{TEXT}} for the selected text." data-index="${index}">${escapeHtml(action.prompt)}</textarea>
         </div>
+        <div>
+          <label>Per-Action Overrides (${PROVIDERS[providerId].label})</label>
+          <div class="override-fields">
+            <div>
+              <label>Model</label>
+              <select class="action-override-model" data-index="${index}">
+                ${buildModelOptions(providerId, getCustomActionOverride(action, providerId).model, true)}
+              </select>
+            </div>
+            <div>
+              <label>Temp</label>
+              <input type="number" class="action-override-temp" data-index="${index}" min="0" max="1" step="0.1" placeholder="Global" value="${getCustomActionOverride(action, providerId).temperature ?? ''}">
+            </div>
+            <div>
+              <label>Max Tokens</label>
+              <input type="number" class="action-override-tokens" data-index="${index}" min="100" max="8000" step="100" placeholder="Global" value="${getCustomActionOverride(action, providerId).maxTokens ?? ''}">
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   `).join('');
@@ -402,18 +552,38 @@ function escapeHtml(str) {
 }
 
 function syncCardsToData() {
+  const providerId = providerSelect.value;
   const cards = customActionsList.querySelectorAll('.custom-action-card');
   cards.forEach((card, index) => {
     if (customActions[index]) {
       customActions[index].name = card.querySelector('.action-name').value.trim();
       customActions[index].prompt = card.querySelector('.action-prompt').value.trim();
+
+      if (!customActions[index].overrides || typeof customActions[index].overrides !== 'object') {
+        customActions[index].overrides = {};
+      }
+
+      const model = card.querySelector('.action-override-model')?.value?.trim();
+      const temperature = parseOptionalNumber(card.querySelector('.action-override-temp')?.value, 0, 1);
+      const maxTokens = parseOptionalNumber(card.querySelector('.action-override-tokens')?.value, 100, 8000);
+      const override = {};
+
+      if (model) override.model = model;
+      if (typeof temperature === 'number') override.temperature = Number(temperature.toFixed(2));
+      if (typeof maxTokens === 'number') override.maxTokens = Math.round(maxTokens);
+
+      if (Object.keys(override).length > 0) {
+        customActions[index].overrides[providerId] = override;
+      } else {
+        delete customActions[index].overrides[providerId];
+      }
     }
   });
 }
 
 addCustomActionBtn.addEventListener('click', () => {
   syncCardsToData();
-  customActions.push({ id: generateId(), name: '', icon: '✏️', prompt: '' });
+  customActions.push({ id: generateId(), name: '', icon: '✏️', prompt: '', overrides: {} });
   renderActionCards();
   const lastCard = customActionsList.querySelector('.custom-action-card:last-child');
   if (lastCard) lastCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -453,6 +623,6 @@ saveCustomActionsBtn.addEventListener('click', () => {
 });
 
 chrome.storage.local.get('customActions', ({ customActions: saved }) => {
-  customActions = saved || [];
+  customActions = (saved || []).map(normalizeCustomAction);
   renderActionCards();
 });
