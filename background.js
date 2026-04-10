@@ -655,7 +655,7 @@ async function runStream(port, requestId, action, text) {
       resolveToolConfig(),
     ]);
     const { prompt, runtimeConfig } = await resolvePromptAndConfig(action, text, config, providerId);
-    const enrichedPrompt = await maybeEnrichPrompt(prompt, text, toolConfig);
+    const enrichedPrompt = await maybeEnrichPrompt(prompt, text, toolConfig, abortController.signal);
 
     emitStream(port, requestId, { phase: 'start', provider: providerId, action });
 
