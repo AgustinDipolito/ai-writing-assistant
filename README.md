@@ -201,7 +201,9 @@ Para darle al asistente la capacidad de **buscar en la web** y, más adelante, u
      id: 'web_search',
      label: 'Web Search',
      async execute(input, context) {
-       return { ok: true, data: {} };
+       // input: user request + selected text
+       // context: active provider, tool settings, tab metadata
+       return { ok: true, data: { results: [] } };
      },
    };
    ```

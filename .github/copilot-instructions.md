@@ -172,7 +172,9 @@ To add **web search** first and support **future agent/tools integrations** with
        id: 'tool_id',
        label: 'Human readable name',
        async execute(input, context) {
-         return { ok: true, data: {} };
+         // input: user request + selected text
+         // context: active provider, tool settings, tab metadata
+         return { ok: true, data: { results: [] } };
        },
      };
      ```
