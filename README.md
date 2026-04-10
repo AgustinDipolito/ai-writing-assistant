@@ -201,7 +201,7 @@ Para darle al asistente la capacidad de **buscar en la web** y, más adelante, u
      id: 'web_search',
      label: 'Web Search',
      async execute(input, context) {
-       // devuelve datos estructurados, no texto renderizado final
+       return { ok: true, data: {} };
      },
    };
    ```
@@ -214,7 +214,7 @@ Para darle al asistente la capacidad de **buscar en la web** y, más adelante, u
    - Esto evita acoplar `content.js` a una herramienta específica.
 
 3. **Implementar primero Web Search**
-   - Crear un adaptador dedicado (`webSearchTool`) con respuesta normalizada:
+   - Crear el adaptador `webSearchTool` (con `id: 'web_search'`) y una respuesta normalizada:
 
    ```js
    {
@@ -253,7 +253,7 @@ Para darle al asistente la capacidad de **buscar en la web** y, más adelante, u
    - Agregar confirmación del usuario antes de habilitar tools que consulten servicios externos o automaticen acciones del navegador.
 
 7. **Orden recomendado de entrega**
-   - Fase 1: `TOOLS` registry + `toolConfig`
+   - Fase 1: registro `TOOLS` + `toolConfig`
    - Fase 2: `webSearchTool` + UI mínima en Options
    - Fase 3: prompt/orchestrator para usar resultados de búsqueda en respuestas
    - Fase 4: soporte para tools/agentes adicionales con la misma interfaz
