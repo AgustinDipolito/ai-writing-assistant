@@ -318,6 +318,89 @@ const PROVIDERS = {
   openai: openaiAdapter,
 };
 
+// ============================================================
+// TOOLS REGISTRY
+// ============================================================
+
+const webSearchTool = {
+  id: 'web_search',
+  label: 'Web Search',
+
+  async execute(input, context) {
+    const searchCfg = context?.toolConfig?.webSearch || {};
+    const apiKey = searchCfg.apiKey || '';
+    const maxResults = Math.min(10, Math.max(1, parseInt(searchCfg.maxResults, 10) || 5));
+
+    if (!apiKey) {
+      throw new Error('Web search requires a Brave Search API key. Configure it in Options → Tools.');
+    }
+
+    // Truncate to 400 characters to stay within Brave Search API query length limits.
+    const rawQuery = String(input.text || '').substring(0, 400);
+    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(rawQuery)}&count=${maxResults}`;
+
+    const response = await fetch(url, {
+      headers: {
+        Accept: 'application/json',
+        'X-Subscription-Token': apiKey,
+      },
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.message || `Brave Search API error (HTTP ${response.status})`);
+    }
+
+    const data = await response.json();
+    const results = (data.web?.results || []).slice(0, maxResults).map((r) => ({
+      title: String(r.title || '').substring(0, 200),
+      url: String(r.url || ''),
+      snippet: String(r.description || '').substring(0, 500),
+    }));
+
+    return { ok: true, data: { query: rawQuery, results } };
+  },
+};
+
+const TOOLS = {
+  web_search: webSearchTool,
+};
+
+// ============================================================
+// TOOL CONFIG + ORCHESTRATION HELPERS
+// ============================================================
+
+async function resolveToolConfig() {
+  const storage = await chrome.storage.local.get('toolConfig');
+  return storage.toolConfig || { enabledTools: [], webSearch: { maxResults: 5 } };
+}
+
+function buildSearchResultsContext(searchData) {
+  if (!searchData?.results?.length) return '';
+  const lines = searchData.results.map(
+    (r, i) => `[${i + 1}] ${r.title}\nURL: ${r.url}\n${r.snippet}`
+  );
+  return `--- Web Search Results ---\nQuery: ${searchData.query}\n\n${lines.join('\n\n')}\n---`;
+}
+
+async function maybeEnrichPrompt(prompt, text, toolConfig) {
+  const enabledTools = toolConfig?.enabledTools || [];
+  if (!enabledTools.includes('web_search')) return prompt;
+
+  try {
+    const tool = TOOLS.web_search;
+    const result = await tool.execute({ text }, { toolConfig });
+    if (!result.ok || !result.data?.results?.length) return prompt;
+    const context = buildSearchResultsContext(result.data);
+    return `${context}\n\n${prompt}`;
+  } catch (err) {
+    // Tool failures are non-fatal; fall back to the original prompt.
+    // Log the error so API key issues or network problems surface in the service worker console.
+    console.warn('[AI Writing Assistant] Web search tool failed:', err?.message || err);
+    return prompt;
+  }
+}
+
 async function processSSEStream(response, extractDelta, onDelta, signal) {
   if (!response.ok) {
     const errText = await response.text().catch(() => '');
@@ -567,15 +650,19 @@ async function runStream(port, requestId, action, text) {
   activeStreams.set(requestId, { controller: abortController, port });
 
   try {
-    const { adapter, apiKey, config, providerId } = await resolveActiveConfig();
+    const [{ adapter, apiKey, config, providerId }, toolConfig] = await Promise.all([
+      resolveActiveConfig(),
+      resolveToolConfig(),
+    ]);
     const { prompt, runtimeConfig } = await resolvePromptAndConfig(action, text, config, providerId);
+    const enrichedPrompt = await maybeEnrichPrompt(prompt, text, toolConfig, abortController.signal);
 
     emitStream(port, requestId, { phase: 'start', provider: providerId, action });
 
     let completeText = '';
     if (typeof adapter.stream === 'function') {
       completeText = await adapter.stream(
-        prompt,
+        enrichedPrompt,
         apiKey,
         runtimeConfig,
         (delta) => emitStream(port, requestId, { phase: 'delta', delta, provider: providerId, action }),
@@ -584,13 +671,13 @@ async function runStream(port, requestId, action, text) {
 
       // Fallback for providers/environments where streaming yields no deltas.
       if (!completeText?.trim()) {
-        completeText = await adapter.call(prompt, apiKey, runtimeConfig);
+        completeText = await adapter.call(enrichedPrompt, apiKey, runtimeConfig);
         if (completeText) {
           emitStream(port, requestId, { phase: 'delta', delta: completeText, provider: providerId, action });
         }
       }
     } else {
-      completeText = await adapter.call(prompt, apiKey, runtimeConfig);
+      completeText = await adapter.call(enrichedPrompt, apiKey, runtimeConfig);
       emitStream(port, requestId, { phase: 'delta', delta: completeText, provider: providerId, action });
     }
 
@@ -675,9 +762,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   (async () => {
     try {
-      const { adapter, apiKey, config, providerId } = await resolveActiveConfig();
+      const [{ adapter, apiKey, config, providerId }, toolConfig] = await Promise.all([
+        resolveActiveConfig(),
+        resolveToolConfig(),
+      ]);
       const { prompt, runtimeConfig } = await resolvePromptAndConfig(action, text, config, providerId);
-      const result = await adapter.call(prompt, apiKey, runtimeConfig);
+      const enrichedPrompt = await maybeEnrichPrompt(prompt, text, toolConfig);
+      const result = await adapter.call(enrichedPrompt, apiKey, runtimeConfig);
       sendResponse({ result });
     } catch (err) {
       sendResponse({ error: err.message || 'An unexpected error occurred.' });
