@@ -151,6 +151,7 @@
   const copyToast = results.querySelector('.ai-copy-toast');
   const stopBtn = results.querySelector('[data-role="stop"]');
   const applyBtn = results.querySelector('[data-role="apply"]');
+  const closeBtn = results.querySelector('[data-role="close"]');
 
   let loadedCustomActions = [];
   let selectedText = '';
@@ -1021,6 +1022,39 @@
     if (e.key === 'Escape') hideAll();
   });
 
+  // Direct listener on the close button so it works reliably regardless of
+  // shadow-DOM event-retargeting behaviour in different browsers.
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    hideAll();
+  });
+
+  // Hide the floating menu whenever the page is scrolled.  The results panel
+  // stays visible if a response is loading or already shown so the user can
+  // still read it.  Capture phase catches scroll events from any nested
+  // scrollable container on the host page (shadow-DOM internal scroll does not
+  // bubble/compose, so it is never captured here).
+  // Early-exit when both UI layers are already hidden to avoid any overhead.
+  window.addEventListener('scroll', () => {
+    if (!menu.classList.contains('visible') && !results.classList.contains('visible')) return;
+    // clearSelectionUi() only hides the menu when results are visible/loading;
+    // it calls hideAll() only when neither panel is active.
+    clearSelectionUi();
+  }, true);
+
+  // When the viewport is resized the fixed position of the menu is likely wrong;
+  // dismiss it so it does not float in an incorrect location.
+  // Debounced to avoid excessive calls during continuous resize drags.
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    if (!menu.classList.contains('visible')) return;
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      clearSelectionUi();
+      resizeTimer = null;
+    }, 150);
+  });
+
   function handleFocusLoss() {
     suppressUiUntil = Date.now() + 250;
     selectedText = '';
@@ -1040,6 +1074,12 @@
     if (document.hidden) {
       handleFocusLoss();
     }
+  });
+
+  // pagehide fires when navigating away or switching to a bfcache-restored page,
+  // which visibilitychange / blur may not reliably cover in all browsers.
+  window.addEventListener('pagehide', () => {
+    handleFocusLoss();
   });
 
   let selectionChangeTimer = null;
