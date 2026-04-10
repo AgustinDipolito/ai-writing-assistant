@@ -92,10 +92,9 @@ const {
 // ---------------------------------------------------------------------------
 
 test('DEFAULT_PROMPTS contains all image actions', () => {
-  assert.ok(typeof DEFAULT_PROMPTS.describe_image === 'function', 'describe_image should be a function');
-  assert.ok(typeof DEFAULT_PROMPTS.extract_text === 'function', 'extract_text should be a function');
-  assert.ok(typeof DEFAULT_PROMPTS.analyze_image === 'function', 'analyze_image should be a function');
-  assert.ok(typeof DEFAULT_PROMPTS.generate_image === 'function', 'generate_image should be a function');
+  ['describe_image', 'extract_text', 'analyze_image', 'generate_image'].forEach((action) => {
+    assert.equal(typeof DEFAULT_PROMPTS[action], 'function', `${action} should be a function`);
+  });
 });
 
 test('DEFAULT_PROMPTS image action prompts return strings', () => {

@@ -236,7 +236,7 @@ const geminiAdapter = {
     );
   },
 
-  async generateImage(prompt, apiKey) {
+  async generateImage(prompt, apiKey, _config = {}) {
     const model = this.imageGenerationModel;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
@@ -383,7 +383,7 @@ const openaiAdapter = {
     );
   },
 
-  async generateImage(prompt, apiKey) {
+  async generateImage(prompt, apiKey, _config = {}) {
     const response = await fetch('https://api.openai.com/v1/images/generations', {
       method: 'POST',
       headers: {

@@ -311,7 +311,7 @@
       canvas.height = imgEl.naturalHeight || imgEl.height || 300;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(imgEl, 0, 0);
-      return canvas.toDataURL('image/jpeg', 0.85);
+      return canvas.toDataURL('image/jpeg', 0.75);
     } catch {
       // Canvas tainted (cross-origin without CORS) — fall back to the src URL.
       // OpenAI vision accepts direct URLs; Gemini vision requires base64.
@@ -1143,7 +1143,8 @@
       if (href) {
         const a = document.createElement('a');
         a.href = href;
-        a.download = 'ai-generated-image.png';
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        a.download = `ai-generated-image-${ts}.png`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
