@@ -626,3 +626,66 @@ chrome.storage.local.get('customActions', ({ customActions: saved }) => {
   customActions = (saved || []).map(normalizeCustomAction);
   renderActionCards();
 });
+
+// ============================================================
+// 13. TOOLS
+// ============================================================
+
+const webSearchEnabledChk  = document.getElementById('webSearchEnabled');
+const webSearchPanel       = document.getElementById('webSearchPanel');
+const braveApiKeyInput     = document.getElementById('braveApiKey');
+const searchMaxResultsInput = document.getElementById('searchMaxResults');
+const saveToolsBtn         = document.getElementById('saveTools');
+const toolsAutoSave        = document.getElementById('toolsAutoSave');
+const toolsStatusEl        = document.getElementById('toolsStatus');
+
+webSearchEnabledChk.addEventListener('change', () => {
+  webSearchPanel.style.display = webSearchEnabledChk.checked ? '' : 'none';
+});
+
+document.querySelectorAll('.toggle-visibility[data-target="braveApiKey"]').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    const input = document.getElementById('braveApiKey');
+    if (!input) return;
+    input.type = input.type === 'password' ? 'text' : 'password';
+    btn.title = input.type === 'password' ? 'Show key' : 'Hide key';
+  });
+});
+
+function gatherToolConfig() {
+  const enabledTools = [];
+  if (webSearchEnabledChk.checked) enabledTools.push('web_search');
+
+  return {
+    enabledTools,
+    webSearch: {
+      apiKey: braveApiKeyInput.value.trim(),
+      maxResults: Math.min(10, Math.max(1, parseInt(searchMaxResultsInput.value, 10) || 5)),
+    },
+  };
+}
+
+saveToolsBtn.addEventListener('click', () => {
+  const toolConfig = gatherToolConfig();
+
+  if (toolConfig.enabledTools.includes('web_search') && !toolConfig.webSearch.apiKey) {
+    showStatus('error', 'Please enter a Brave Search API key to enable web search.', toolsStatusEl);
+    return;
+  }
+
+  chrome.storage.local.set({ toolConfig }, () => {
+    showStatus('success', 'Tools settings saved!', toolsStatusEl);
+    toolsAutoSave.classList.add('show');
+    setTimeout(() => toolsAutoSave.classList.remove('show'), 1800);
+  });
+});
+
+chrome.storage.local.get('toolConfig', ({ toolConfig: saved }) => {
+  const tc = saved || { enabledTools: [], webSearch: { maxResults: 5 } };
+  const webSearchOn = Array.isArray(tc.enabledTools) && tc.enabledTools.includes('web_search');
+
+  webSearchEnabledChk.checked = webSearchOn;
+  webSearchPanel.style.display = webSearchOn ? '' : 'none';
+  braveApiKeyInput.value = tc.webSearch?.apiKey || '';
+  searchMaxResultsInput.value = tc.webSearch?.maxResults || 5;
+});

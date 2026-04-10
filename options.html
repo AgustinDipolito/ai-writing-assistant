@@ -569,6 +569,32 @@
             padding: 7px 9px;
             font-size: 12px;
         }
+        .tool-toggle-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 8px;
+        }
+
+        .tool-toggle-row label {
+            margin: 0;
+            font-size: 14px;
+        }
+
+        .tool-toggle-row input[type="checkbox"] {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+            accent-color: var(--accent);
+        }
+
+        .tool-panel {
+            margin-top: 12px;
+            padding: 14px;
+            background: var(--bg-secondary);
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+        }
     </style>
 </head>
 
@@ -858,6 +884,73 @@
     </div>
 
     <div class="status" id="customActionsStatus"></div>
+
+    <div class="divider"></div>
+
+    <!-- ===== Tools ===== -->
+    <h2 class="section-title">Tools</h2>
+    <p class="hint" style="margin-bottom: 14px;">
+        Enable AI tools that enrich responses with real-world data.
+        Tools run before the AI model and inject context into the prompt.
+    </p>
+
+    <!-- Web Search -->
+    <div class="form-group">
+        <div class="tool-toggle-row">
+            <input type="checkbox" id="webSearchEnabled">
+            <label for="webSearchEnabled">Web Search</label>
+        </div>
+        <p class="hint">Searches the web and injects relevant results into the AI prompt before responding.</p>
+    </div>
+
+    <div id="webSearchPanel" class="tool-panel" style="display:none">
+        <div class="form-group">
+            <label for="braveApiKey">Brave Search API Key</label>
+            <div class="input-wrapper">
+                <input type="password" id="braveApiKey" placeholder="Enter your Brave Search API key"
+                    autocomplete="off" spellcheck="false">
+                <button class="toggle-visibility" data-target="braveApiKey" type="button" title="Show/hide key">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                    </svg>
+                </button>
+            </div>
+            <p class="hint">
+                Get your free key at
+                <a href="https://api.search.brave.com/register" target="_blank" rel="noopener">Brave Search API</a>.
+                Stored locally, never shared.
+            </p>
+        </div>
+
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="searchMaxResults">Max Results</label>
+            <input type="number" id="searchMaxResults" value="5" min="1" max="10" step="1">
+            <p class="hint">Number of search results to include in context (1–10).</p>
+        </div>
+    </div>
+
+    <div class="btn-row">
+        <button class="btn-primary" id="saveTools">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <polyline points="17 21 17 13 7 13 7 21" />
+                <polyline points="7 3 7 8 15 8" />
+            </svg>
+            Save Tools
+        </button>
+        <span class="auto-save-badge" id="toolsAutoSave">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="20 6 9 17 4 12" />
+            </svg>
+            Saved
+        </span>
+    </div>
+
+    <div class="status" id="toolsStatus"></div>
 
     <div class="divider"></div>
 
