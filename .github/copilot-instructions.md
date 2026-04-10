@@ -159,6 +159,69 @@ When implementing roadmap items, follow the patterns below.
 | **Markdown improvements** | Extend the inline renderer in `content.js` to support fenced code blocks with syntax highlighting (Prism.js as a bundled module, or a micro-highlighter), tables (parse `|` rows), and ordered lists. |
 | **Context menu** | Register via `manifest.json` `contextMenus` permission + `chrome.contextMenus.create` in `background.js` `onInstalled`. Send `AI_REQUEST` from the context menu handler. |
 
+### Tool-Capable Assistant Plan
+
+To add **web search** first and support **future agent/tools integrations** without reworking the current provider architecture, follow this phased design:
+
+1. **Keep providers and tools separate**
+   - `PROVIDERS` remains the registry for LLM backends only.
+   - Add a parallel `TOOLS` registry in `background.js`.
+   - Each tool should implement a small adapter contract:
+     ```js
+     const someTool = {
+       id: 'tool_id',
+       label: 'Human readable name',
+       async execute(input, context) {
+         return { ok: true, data: {} };
+       },
+     };
+     ```
+
+2. **Add orchestration in the background service worker**
+   - The background should decide whether a request:
+     - goes directly to the active provider, or
+     - executes one or more enabled tools first and then sends a composed prompt to the provider.
+   - This keeps `content.js` presentation-focused and prevents provider/tool coupling.
+
+3. **Web search should be the first tool**
+   - Implement a `web_search` adapter that returns normalized structured results:
+     ```js
+     {
+       query: 'user request',
+       results: [{ title, url, snippet }]
+     }
+     ```
+   - Limit result count, sanitize all returned text, and pass only text/URLs into prompts or UI.
+   - Keep search opt-in until permission and UX flows are complete.
+
+4. **Extend storage schema for tool settings**
+   - Add a top-level `toolConfig` object in `chrome.storage.local`, e.g.:
+     ```js
+     {
+       toolConfig: {
+         enabledTools: ['web_search'],
+         webSearch: { maxResults: 5 }
+       }
+     }
+     ```
+   - Keep this independent from `providerConfig` so tool rollout does not affect provider compatibility.
+
+5. **Plan for future agent tools**
+   - Treat “agent tools” the same as any other tool: structured input → `execute()` → structured output.
+   - Examples: browser automation, local knowledge retrieval, or delegated sub-agents.
+   - The shared interface means tools can be added without changing the selection UI or prompt-building model.
+
+6. **Security rules**
+   - Every new tool must explicitly add required `host_permissions` to `manifest.json`.
+   - Never inject remote HTML into the page; only render sanitized text output.
+   - Prefer user confirmation before enabling tools that reach external services or perform browser actions.
+
+7. **Recommended delivery order**
+   - Phase 1: `TOOLS` registry + `toolConfig`
+   - Phase 2: `web_search` adapter + minimal Options UI
+   - Phase 3: prompt/orchestration layer that feeds tool output into the model
+   - Phase 4: additional tool/agent adapters using the same contract
+
 ---
 
 ## Constraints & Gotchas

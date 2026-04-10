@@ -187,6 +187,79 @@ Tareas pendientes y mejoras de alto impacto para la experiencia de usuario:
 - **Mejoras de Markdown**: Soporte para tablas, bloques de código resaltados y corrección de listas ordenadas.
 - **Menú contextual**: Integración con el clic derecho de Chrome para usuarios que no desean el menú flotante.
 
+### 🧭 Plan de implementación — Assistant con herramientas
+
+Para darle al asistente la capacidad de **buscar en la web** y, más adelante, usar **otras herramientas/agentes**, la implementación propuesta es incremental:
+
+1. **Separar “provider” de “tool”**
+   - Mantener `PROVIDERS` en `background.js` solo para modelos LLM.
+   - Introducir un registro paralelo `TOOLS` con adaptadores independientes.
+   - Cada herramienta debe exponer una interfaz uniforme:
+
+   ```js
+   const webSearchTool = {
+     id: 'web_search',
+     label: 'Web Search',
+     async execute(input, context) {
+       // devuelve datos estructurados, no texto renderizado final
+     },
+   };
+   ```
+
+2. **Agregar una capa de orquestación en `background.js`**
+   - Nuevo flujo: `content.js`/`options.js` → `background.js` → provider + tools habilitadas.
+   - El background debe decidir si:
+     - responde solo con prompt tradicional, o
+     - ejecuta una o más tools y luego pasa el resultado al modelo.
+   - Esto evita acoplar `content.js` a una herramienta específica.
+
+3. **Implementar primero Web Search**
+   - Crear un adaptador dedicado (`webSearchTool`) con respuesta normalizada:
+
+   ```js
+   {
+     query: '...',
+     results: [{ title, url, snippet }]
+   }
+   ```
+
+   - Limitar cantidad de resultados y sanitizar títulos/snippets antes de reenviarlos al modelo.
+   - Mantener la herramienta opcional y desactivada por defecto hasta tener UX de permisos clara.
+
+4. **Extender la configuración**
+   - En `chrome.storage.local`, agregar una sección `toolConfig`, por ejemplo:
+
+   ```js
+   {
+     toolConfig: {
+       enabledTools: ['web_search'],
+       webSearch: {
+         maxResults: 5
+       }
+     }
+   }
+   ```
+
+   - En `options.html`/`options.js`, añadir toggles por herramienta y ajustes básicos.
+
+5. **Diseñar para futuras tools/agentes**
+   - Las próximas herramientas (browser actions, knowledge base, otros agentes) deben usar la misma interfaz `execute(input, context)`.
+   - Si en el futuro se agregan “agent tools”, el background puede tratarlos igual que cualquier tool: entrada estructurada → ejecución → salida estructurada.
+   - Esto permite agregar capacidades sin reescribir prompts, UI ni storage.
+
+6. **Seguridad y permisos**
+   - Toda tool nueva debe declarar su `host_permissions` en `manifest.json`.
+   - Nunca exponer HTML remoto directamente en `content.js`; solo texto sanitizado.
+   - Agregar confirmación del usuario antes de habilitar tools que consulten servicios externos o automaticen acciones del navegador.
+
+7. **Orden recomendado de entrega**
+   - Fase 1: `TOOLS` registry + `toolConfig`
+   - Fase 2: `webSearchTool` + UI mínima en Options
+   - Fase 3: prompt/orchestrator para usar resultados de búsqueda en respuestas
+   - Fase 4: soporte para tools/agentes adicionales con la misma interfaz
+
+Con este enfoque, la extensión evoluciona de “prompt sobre texto seleccionado” a “assistant con capacidades”, sin romper la arquitectura actual ni mezclar providers con herramientas.
+
 ---
 
 ## 👤 Autor
