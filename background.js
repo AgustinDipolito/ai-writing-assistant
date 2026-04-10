@@ -913,6 +913,24 @@ chrome.runtime.onInstalled.addListener((details) => {
   }
 });
 
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = {
+    LANGUAGE_INSTRUCTIONS,
+    DEFAULT_PROMPTS,
+    IMAGE_ANALYSIS_ACTIONS,
+    BASE_ACTIONS,
+    buildPrompt,
+    buildCustomPrompt,
+    coerceTemperature,
+    coerceMaxTokens,
+    normalizeActionOverride,
+    resolveActionOverride,
+    buildRuntimeConfig,
+    geminiAdapter,
+    openaiAdapter,
+  };
+}
+
 chrome.runtime.onStartup.addListener(() => {
   initializeActiveTabMap();
   rebuildContextMenus().catch(() => {});
