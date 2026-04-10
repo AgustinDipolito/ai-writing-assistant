@@ -342,7 +342,6 @@ const webSearchTool = {
     const response = await fetch(url, {
       headers: {
         Accept: 'application/json',
-        'Accept-Encoding': 'gzip',
         'X-Subscription-Token': apiKey,
       },
     });
