@@ -643,13 +643,6 @@ webSearchEnabledChk.addEventListener('change', () => {
   webSearchPanel.style.display = webSearchEnabledChk.checked ? '' : 'none';
 });
 
-document.querySelectorAll('.toggle-visibility[data-target="braveApiKey"]').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    braveApiKeyInput.type = braveApiKeyInput.type === 'password' ? 'text' : 'password';
-    btn.title = braveApiKeyInput.type === 'password' ? 'Show key' : 'Hide key';
-  });
-});
-
 function gatherToolConfig() {
   const enabledTools = [];
   if (webSearchEnabledChk.checked) enabledTools.push('web_search');
