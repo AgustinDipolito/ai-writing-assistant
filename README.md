@@ -1,197 +1,250 @@
-# AI Writing Assistant ✨
+# AI Writing Assistant
 
-Extensión de Chrome para mejorar textos seleccionados en cualquier página web usando **Google Gemini** y **OpenAI**.
-
-Permite:
-- Corregir **gramática**
-- Mejorar **estilo**
-- Sugerir **sinónimos**
-- Crear **acciones personalizadas** con prompts propios
+A Chrome extension that surfaces an AI-powered action menu over any selected text on any web page. Supports Google Gemini and OpenAI as interchangeable providers.
 
 ---
 
-## 🚀 Características
+## Overview
 
-- Menú flotante sobre texto seleccionado (inyectado con Shadow DOM).
-- Menú contextual (clic derecho) con submenú por acción.
-- Panel de resultados con **streaming en tiempo real** y renderizado Markdown mejorado.
-- Configuración avanzada desde opciones:
-  - Provider activo (Gemini / OpenAI)
-  - Modelo por provider
-  - Temperatura
-  - Máximo de tokens
-  - Idioma de respuesta
-  - Prompt personalizado por acción
-  - Instrucción global (`systemInstruction`)
-- Acciones personalizadas dinámicas (nombre, ícono y prompt).
-- Soporte de tablas, bloques de código y listas ordenadas en resultados.
-- Soporte de tema claro/oscuro según `prefers-color-scheme`.
-- Almacenamiento local de configuración con `chrome.storage.local`.
+Select text anywhere in Chrome. A small floating menu appears. Choose an action — grammar check, style improvement, synonym lookup, or any custom action you have defined. The result streams into a panel in real time. Copy it, apply it directly to the original field, or dismiss and keep browsing.
+
+No backend, no data collection. Every API call goes directly from your browser to the provider you choose.
 
 ---
 
-## 🧱 Stack técnico
+## Features
 
-- **Manifest V3**
-- **Content Script** (`content.js`)
-- **Background Service Worker** (`background.js`)
-- **Options Page** (`options.html` + `options.js`)
-- **Google Gemini API** (`generateContent` + `streamGenerateContent`)
-- **OpenAI Chat Completions API** (modo normal + stream)
+- Floating action menu appears above any text selection, isolated via Shadow DOM so it never conflicts with page styles.
+- Right-click context menu as an alternative trigger for every action.
+- Results stream token-by-token using the provider's SSE API.
+- Built-in Markdown rendering in the results panel: headings, bold/italic, inline code, fenced code blocks, blockquotes, tables, ordered and unordered lists.
+- Apply button replaces the selected text in-place for `<input>`, `<textarea>`, and `contenteditable` elements.
+- Light and dark themes follow the system `prefers-color-scheme`.
+- All configuration stored locally with `chrome.storage.local`.
+
+### Built-in actions
+
+| Action   | What it does                                                        |
+|----------|---------------------------------------------------------------------|
+| Grammar  | Identifies errors, explains each one, and provides the correction.  |
+| Style    | Evaluates clarity, conciseness, tone, readability, and word choice. |
+| Synonyms | Lists 2-4 synonyms for every significant word in the selection.     |
 
 ---
 
-## 📦 Instalación (modo desarrollador)
+## Installation
 
-1. Clona este repositorio:
+> Requires Chrome or any Chromium-based browser with developer mode enabled.
+
+1. Clone the repository:
 
 ```bash
 git clone https://github.com/AgustinDipolito/ai-writing-assistant.git
 cd ai-writing-assistant
 ```
 
-2. Abre Chrome y ve a `chrome://extensions/`
-3. Activa **Developer mode** (arriba a la derecha)
-4. Haz clic en **Load unpacked**
-5. Selecciona la carpeta del proyecto
+2. Open `chrome://extensions/` in Chrome.
+3. Enable **Developer mode** (top-right toggle).
+4. Click **Load unpacked** and select the project folder.
+
+The extension installs immediately. No build step or dependencies are required.
 
 ---
 
-## 🔑 Configuración inicial
+## Setup
 
-1. Abre las opciones de la extensión.
-2. Elige el provider (Gemini u OpenAI).
-3. Pega tu API key del provider seleccionado.
-4. Guarda y prueba conexión.
+1. Open the extension options (click the extension icon and choose Options, or right-click the icon and select **Options**).
+2. Select your provider (Gemini or OpenAI).
+3. Paste the API key for that provider.
+4. Click **Save**, then **Test Connection** to verify.
 
-Puedes obtener tu key en:
-- https://aistudio.google.com/app/apikey
-- https://platform.openai.com/api-keys
-
----
-
-## 🧠 Cómo usarla
-
-1. Selecciona texto en cualquier web.
-2. Aparece un menú flotante con acciones:
-   - Grammar
-   - Style
-   - Synonyms
-   - Tus acciones personalizadas
-3. Haz clic en una acción (o usa clic derecho → **AI Writing Assistant**).
-4. El panel muestra el resultado en streaming y permite copiarlo.
+Get your API key:
+- Gemini: https://aistudio.google.com/app/apikey
+- OpenAI: https://platform.openai.com/api-keys
 
 ---
 
-## ⚙️ Personalización avanzada
+## Usage
 
-Desde la página de opciones puedes:
-
-- Elegir provider y modelo (`gemini-2.0-flash`, `gemini-1.5-pro`, `gpt-4o-mini`, `gpt-4o`, etc.)
-- Ajustar creatividad con `temperature`
-- Limitar longitud de respuesta con `maxTokens`
-- Forzar idioma de salida o auto-detectarlo
-- Reemplazar prompts por defecto usando `{{TEXT}}`
-- Definir una instrucción global para todas las acciones
-
-### Acciones personalizadas
-
-Cada acción personalizada incluye:
-- `name`: nombre del botón
-- `icon`: emoji/icono del botón
-- `prompt`: plantilla del prompt
-- `id`: generado automáticamente con prefijo `custom_`
-
-> Si el prompt no contiene `{{TEXT}}`, el texto seleccionado se agrega al final automáticamente.
+1. Select any text on a web page.
+2. Click an action in the floating menu, or right-click and choose **AI Writing Assistant** > action.
+3. The result panel opens and streams the response.
+4. Use **Copy** to copy the result to the clipboard, or **Apply** to replace the original text directly in the page.
 
 ---
 
-## 🗂️ Estructura del proyecto
+## Configuration
+
+All settings are available in the Options page.
+
+### Global settings
+
+| Setting            | Description                                                                 |
+|--------------------|-----------------------------------------------------------------------------|
+| Provider           | Active AI provider: Gemini or OpenAI.                                       |
+| Model              | Model to use for the selected provider.                                     |
+| Temperature        | Controls response creativity (0 = deterministic, 1 = most varied).         |
+| Max tokens         | Maximum length of the response.                                             |
+| Response language  | Force a specific output language, or auto-detect from the input text.       |
+| System instruction | A global instruction prepended to every request.                            |
+| Action prompts     | Override the default prompt for Grammar, Style, or Synonyms individually.  |
+
+### Per-action overrides
+
+Each built-in action (Grammar, Style, Synonyms) can override the model, temperature, and max tokens independently of the global setting.
+
+### Custom actions
+
+Custom actions appear in both the floating menu and the context menu alongside the built-in ones.
+
+Each custom action has:
+- **Name** - label shown on the button.
+- **Icon** - emoji or short symbol displayed on the button.
+- **Prompt** - template sent to the AI. Use `{{TEXT}}` as a placeholder for the selected text. If `{{TEXT}}` is absent, the selected text is appended at the end automatically.
+
+Custom action IDs are generated automatically with the prefix `custom_`.
+
+---
+
+## Troubleshooting
+
+**"API key not configured"** - Open Options, enter and save an API key for the active provider.
+
+**API error or model not found** - Verify the API key is valid and the selected model is available under your account.
+
+**Context menu does not appear** - Make sure text is selected before right-clicking. Reload the extension and the tab after any update.
+
+**Floating menu does not appear** - Confirm the extension is enabled in `chrome://extensions/`. Reload the tab after installing or updating.
+
+---
+
+## Technical Reference
+
+This section covers internals relevant to contributors or anyone extending the extension.
+
+### Technology
+
+- Chrome Extension Manifest V3
+- Plain JavaScript, no build step, no external runtime dependencies
+- Google Gemini API (`generateContent`, `streamGenerateContent`)
+- OpenAI Chat Completions API (standard and streaming)
+
+### Project structure
 
 ```text
 ai-writing-assistant/
-├─ background.js      # Router de providers, streaming y context menu
-├─ content.js         # UI flotante, streaming y render Markdown
-├─ manifest.json      # Configuración de la extensión (MV3)
-├─ options.html       # Interfaz de configuración
-├─ options.js         # Lógica de la página de opciones
-└─ icons/             # Íconos de la extensión
+├── background.js        # Service worker: provider adapters, streaming, context menu
+├── content.js           # Content script: Shadow DOM UI, selection detection, result panel
+├── selection-utils.js   # Shared selection/apply helpers (loaded by content script and tests)
+├── manifest.json        # MV3 manifest: permissions, host_permissions, content scripts
+├── options.html         # Options page markup
+├── options.js           # Options page logic: form state, provider switching, connection test
+├── icons/               # Extension icons at 16, 48, and 128 px
+└── tests/               # Node.js unit tests (built-in test runner)
 ```
 
+### Architecture
+
+```
+[content.js]  --port(ai_stream)-->  [background.js]
+                AI_STREAM_START         resolveActiveConfig()
+                                        resolvePromptAndConfig()
+                                        adapter.stream(...)
+                AI_STREAM_EVENT <--         onDelta -> emitStream()
+                  phase: delta
+                  phase: end / error / aborted
+```
+
+- `content.js` opens a long-lived port named `ai_stream` for each request and receives incremental `AI_STREAM_EVENT` messages.
+- `background.js` resolves the active provider and config from `chrome.storage.local`, builds the prompt, and calls the adapter's `stream` method.
+- A non-streaming fallback (`adapter.call`) is used automatically if `stream` yields no content.
+- The `TEST_CONNECTION` message uses a regular `sendMessage` round-trip (not a port) and is handled by `background.js` for the Options page.
+
+### Storage schema
+
+Configuration is stored under the key `providerConfig` in `chrome.storage.local`:
+
+```js
+{
+  activeProvider: 'gemini' | 'openai',
+  gemini: {
+    apiKey, model, temperature, maxTokens,
+    responseLanguage, promptGrammar, promptStyle, promptSynonyms,
+    systemInstruction,
+    actionOverrides: {
+      grammar:  { model, temperature, maxTokens },
+      style:    { model, temperature, maxTokens },
+      synonyms: { model, temperature, maxTokens },
+    }
+  },
+  openai: { /* same shape */ }
+}
+```
+
+Custom actions are stored separately under `customActions: [{ id, name, icon, prompt, overrides }]`.
+
+A legacy schema (`apiKey` + `agentConfig` keys) is supported for backward compatibility and is treated as Gemini automatically.
+
+### Adding a provider
+
+1. Implement the adapter interface in `background.js`:
+
+```js
+const myAdapter = {
+  defaultModel: 'model-id',
+  models: [{ value: 'model-id', label: 'Display name' }],
+  async call(prompt, apiKey, config) { /* return string */ },
+  async stream(prompt, apiKey, config, onDelta, signal) { /* call onDelta(chunk); return fullText */ },
+  async test(apiKey, model) { /* return string */ },
+};
+```
+
+2. Register it: `PROVIDERS['myprovider'] = myAdapter;`
+3. Add the API origin to `host_permissions` in `manifest.json`.
+4. Add the provider panel (key input, model selector) in `options.html` and `options.js`.
+5. Extend the `providerConfig` storage schema with a `myprovider` key.
+
+### Development workflow
+
+No compilation is needed. To iterate:
+
+1. Edit any source file.
+2. Open `chrome://extensions/` and click **Reload** on the extension.
+3. Reload the target page and test.
+
+Run the unit tests:
+
+```bash
+npm test
+```
+
+Tests use Node's built-in test runner. The test suite covers the shared selection utilities in `selection-utils.js`.
+
+### Permissions
+
+| Permission / host                   | Why it is needed                                      |
+|-------------------------------------|-------------------------------------------------------|
+| `activeTab`                         | Inject the content script into the current tab.       |
+| `storage`                           | Persist provider config and custom actions locally.   |
+| `contextMenus`                      | Register the right-click submenu entries.             |
+| `generativelanguage.googleapis.com` | Gemini API calls.                                     |
+| `api.openai.com`                    | OpenAI API calls.                                     |
+
 ---
 
-## 🔒 Privacidad y seguridad
+## Roadmap
 
-- La API key se guarda en `chrome.storage.local`.
-- El texto seleccionado se envía al provider activo solo al ejecutar una acción.
-- No se usa backend propio: las llamadas van directo a los endpoints oficiales.
+Planned improvements not yet implemented:
 
-Permisos usados en `manifest.json`:
-- `activeTab`
-- `storage`
-- `contextMenus`
-- `host_permissions`:
-  - `https://generativelanguage.googleapis.com/*`
-  - `https://api.openai.com/*`
+- **Session history** - in-panel drawer to revisit recent results within a browser session.
+- **Keyboard shortcuts** - trigger actions without selecting from a menu.
+- **Export / Import** - serialize and restore configuration as a JSON file.
+- **Drag-to-reorder custom actions** - reorder the custom action list via drag and drop in Options.
 
 ---
 
-## 🛠️ Desarrollo
+## Author
 
-No requiere build step ni dependencias externas para correr.
+Built by [AgustinDipolito](https://github.com/AgustinDipolito).
 
-Para iterar rápido:
-1. Edita archivos.
-2. Ve a `chrome://extensions/`.
-3. Haz clic en **Reload** en la extensión.
-4. Prueba en una página real.
-
----
-
-## 🧪 Troubleshooting
-
-**Error: “API key not configured”**
-- Configura la key en Options y guarda.
-
-**Error: “Repository not found / API error”**
-- Verifica modelo, key y permisos de red.
-
-**No aparece el menú contextual**
-- Asegúrate de tener texto seleccionado antes de hacer clic derecho.
-- Recarga la extensión y la pestaña si acabas de actualizar.
-
-**No aparece el menú al seleccionar texto**
-- Asegúrate de que la extensión esté habilitada.
-- Recarga la pestaña después de instalar o actualizar.
-
----
-
-## �️ Roadmap de Features
-
-Tareas pendientes y mejoras de alto impacto para la experiencia de usuario:
-
-### 🚀 Tier 1 — Core (Impacto Crítico)
-- **Multi-Provider AI Router**: Abstraer la lógica para elegir entre Gemini, OpenAI, Claude u OpenRouter.
-- **Streaming de respuestas**: Mostrar resultados en tiempo real (token by token) en lugar de esperar la carga completa.
-- **Aplicación directa ("Apply")**: Botón para reemplazar automáticamente el texto seleccionado en inputs, textareas o editores web.
-
-### ⚡ Tier 2 — Power User (Productividad)
-- **Historial de sesión**: Panel rápido para recuperar los últimos resultados generados y no perder el trabajo.
-- **Atajos de teclado**: `Alt+G` (Grammar), `Alt+S` (Style), etc., configurables desde las opciones.
-- **Configuración por Acción**: Overrides de temperatura, modelo y tokens específicos para cada prompt o acción personalizada.
-- **Test de Prompts**: Botón "Probar" en la página de opciones para validar prompts nuevos sin salir de la configuración.
-
-### 🎨 Tier 3 — Extensibilidad y UX
-- **Drag-to-reorder**: Reordenar acciones personalizadas arrastrándolas en el panel de opciones.
-- **Export/Import**: Respaldar y restaurar toda la configuración (prompts, keys, preferencias) en un archivo JSON.
-- **Mejoras de Markdown**: Soporte para tablas, bloques de código resaltados y corrección de listas ordenadas.
-- **Menú contextual**: Integración con el clic derecho de Chrome para usuarios que no desean el menú flotante.
-
----
-
-## 👤 Autor
-
-Desarrollado por **AgustinDipolito**.
-
-Si te sirve, deja una ⭐ al repo:
-- https://github.com/AgustinDipolito/ai-writing-assistant
+Repository: https://github.com/AgustinDipolito/ai-writing-assistant
