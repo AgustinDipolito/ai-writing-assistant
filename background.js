@@ -336,8 +336,8 @@ const webSearchTool = {
     }
 
     // Truncate to 400 characters to stay within Brave Search API query length limits.
-    const query = encodeURIComponent(String(input.text || '').substring(0, 400));
-    const url = `https://api.search.brave.com/res/v1/web/search?q=${query}&count=${maxResults}`;
+    const rawQuery = String(input.text || '').substring(0, 400);
+    const url = `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(rawQuery)}&count=${maxResults}`;
 
     const response = await fetch(url, {
       headers: {
@@ -358,7 +358,7 @@ const webSearchTool = {
       snippet: String(r.description || '').substring(0, 500),
     }));
 
-    return { ok: true, data: { query: String(input.text || ''), results } };
+    return { ok: true, data: { query: rawQuery, results } };
   },
 };
 
