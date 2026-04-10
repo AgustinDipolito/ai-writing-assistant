@@ -28,7 +28,10 @@ const BASE_ACTIONS = [
   { id: 'grammar', label: 'Grammar' },
   { id: 'style', label: 'Style' },
   { id: 'synonyms', label: 'Synonyms' },
+  { id: 'generate_image', label: '🎨 Generate Image' },
 ];
+
+const IMAGE_ANALYSIS_ACTIONS = new Set(['describe_image', 'extract_text', 'analyze_image']);
 
 const DEFAULT_PROMPTS = {
   grammar: (text, lang) =>
@@ -81,6 +84,32 @@ Text:
 """
 ${text}
 """`,
+
+  describe_image: (_text, lang) =>
+    `You are a visual analyst. Describe this image in detail, including:
+- Main subjects and objects present
+- Colors, composition, and visual style
+- Any text visible in the image
+- Context, setting, and mood
+
+${lang}. Be comprehensive yet concise. Use clear formatting.`,
+
+  extract_text: (_text, lang) =>
+    `Extract and transcribe ALL text visible in this image exactly as written. Maintain the original formatting and layout as closely as possible. Preserve line breaks, bullet points, and structure where relevant. If no text is visible in the image, say "No text found in this image."
+
+${lang}.`,
+
+  analyze_image: (_text, lang) =>
+    `You are an expert visual analyst. Provide a thorough analysis of this image:
+
+1. **Content** — What is depicted? Who or what are the main subjects?
+2. **Context** — What is the likely purpose, origin, or setting?
+3. **Details** — Notable features, symbols, text, or elements worth highlighting.
+4. **Composition** — Visual layout, color palette, style, and technical quality.
+
+${lang}. Use clear formatting with sections.`,
+
+  generate_image: (text, _lang) => text,
 };
 
 function buildPrompt(action, text, config) {
@@ -119,6 +148,7 @@ function buildCustomPrompt(promptTemplate, text, config) {
 
 const geminiAdapter = {
   defaultModel: 'gemini-2.0-flash',
+  imageGenerationModel: 'gemini-2.0-flash-preview-image-generation',
   models: [
     { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (recommended)' },
     { value: 'gemini-2.0-flash-lite', label: 'Gemini 2.0 Flash Lite (fastest)' },
@@ -126,12 +156,28 @@ const geminiAdapter = {
     { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
   ],
 
-  async call(prompt, apiKey, config = {}) {
+  _buildParts(prompt, imageData) {
+    const parts = [];
+    if (imageData) {
+      if (imageData.startsWith('data:')) {
+        const commaIdx = imageData.indexOf(',');
+        const header = commaIdx > -1 ? imageData.slice(0, commaIdx) : '';
+        const base64 = commaIdx > -1 ? imageData.slice(commaIdx + 1) : imageData;
+        const mimeType = header.match(/data:([^;]+)/)?.[1] || 'image/jpeg';
+        parts.push({ inlineData: { mimeType, data: base64 } });
+      }
+      // External URLs are not supported by Gemini inlineData; skip silently.
+    }
+    parts.push({ text: prompt });
+    return parts;
+  },
+
+  async call(prompt, apiKey, config = {}, imageData = null) {
     const model = config.model || this.defaultModel;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
 
     const body = {
-      contents: [{ parts: [{ text: prompt }] }],
+      contents: [{ parts: this._buildParts(prompt, imageData) }],
       generationConfig: {
         temperature: config.temperature ?? 0.4,
         maxOutputTokens: config.maxTokens || 1500,
@@ -159,12 +205,12 @@ const geminiAdapter = {
     return result;
   },
 
-  async stream(prompt, apiKey, config = {}, onDelta, signal) {
+  async stream(prompt, apiKey, config = {}, onDelta, signal, imageData = null) {
     const model = config.model || this.defaultModel;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
 
     const body = {
-      contents: [{ parts: [{ text: prompt }] }],
+      contents: [{ parts: this._buildParts(prompt, imageData) }],
       generationConfig: {
         temperature: config.temperature ?? 0.4,
         maxOutputTokens: config.maxTokens || 1500,
@@ -190,6 +236,35 @@ const geminiAdapter = {
     );
   },
 
+  async generateImage(prompt, apiKey, _config = {}) {
+    const model = this.imageGenerationModel;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+    const body = {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { responseModalities: ['IMAGE'] },
+    };
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Gemini API error (HTTP ${response.status})`);
+    }
+
+    const data = await response.json();
+    const imagePart = data.candidates?.[0]?.content?.parts?.find((p) => p.inlineData);
+    if (!imagePart) {
+      throw new Error('Gemini did not return an image. Try a different prompt.');
+    }
+    const { mimeType, data: base64 } = imagePart.inlineData;
+    return { imageDataUrl: `data:${mimeType};base64,${base64}`, mimeType };
+  },
+
   async test(apiKey, model) {
     const m = model || this.defaultModel;
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${m}:generateContent?key=${apiKey}`;
@@ -212,6 +287,7 @@ const geminiAdapter = {
 
 const openaiAdapter = {
   defaultModel: 'gpt-4o-mini',
+  visionModels: new Set(['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo']),
   models: [
     { value: 'gpt-4o-mini', label: 'GPT-4o Mini (recommended)' },
     { value: 'gpt-4o', label: 'GPT-4o (highest quality)' },
@@ -219,14 +295,29 @@ const openaiAdapter = {
     { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (fastest)' },
   ],
 
-  async call(prompt, apiKey, config = {}) {
-    const model = config.model || this.defaultModel;
+  _buildUserContent(prompt, imageData, model) {
+    if (!imageData) return prompt;
+    // Fall back to a vision-capable model if the configured one doesn't support it.
+    const visionModel = this.visionModels.has(model) ? model : 'gpt-4o-mini';
+    return {
+      _visionModel: visionModel,
+      content: [
+        { type: 'image_url', image_url: { url: imageData } },
+        { type: 'text', text: prompt },
+      ],
+    };
+  },
+
+  async call(prompt, apiKey, config = {}, imageData = null) {
+    const baseModel = config.model || this.defaultModel;
+    const userContent = this._buildUserContent(prompt, imageData, baseModel);
+    const model = userContent?._visionModel || baseModel;
     const messages = [];
 
     if (config.systemInstruction) {
       messages.push({ role: 'system', content: config.systemInstruction });
     }
-    messages.push({ role: 'user', content: prompt });
+    messages.push({ role: 'user', content: userContent?._visionModel ? userContent.content : prompt });
 
     const body = {
       model,
@@ -255,14 +346,16 @@ const openaiAdapter = {
     return result;
   },
 
-  async stream(prompt, apiKey, config = {}, onDelta, signal) {
-    const model = config.model || this.defaultModel;
+  async stream(prompt, apiKey, config = {}, onDelta, signal, imageData = null) {
+    const baseModel = config.model || this.defaultModel;
+    const userContent = this._buildUserContent(prompt, imageData, baseModel);
+    const model = userContent?._visionModel || baseModel;
     const messages = [];
 
     if (config.systemInstruction) {
       messages.push({ role: 'system', content: config.systemInstruction });
     }
-    messages.push({ role: 'user', content: prompt });
+    messages.push({ role: 'user', content: userContent?._visionModel ? userContent.content : prompt });
 
     const body = {
       model,
@@ -288,6 +381,33 @@ const openaiAdapter = {
       onDelta,
       signal
     );
+  },
+
+  async generateImage(prompt, apiKey, _config = {}) {
+    const response = await fetch('https://api.openai.com/v1/images/generations', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model: 'dall-e-3',
+        prompt,
+        n: 1,
+        size: '1024x1024',
+        response_format: 'b64_json',
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || `OpenAI API error (HTTP ${response.status})`);
+    }
+
+    const data = await response.json();
+    const base64 = data.data?.[0]?.b64_json;
+    if (!base64) throw new Error('OpenAI did not return an image. Try a different prompt.');
+    return { imageDataUrl: `data:image/png;base64,${base64}`, mimeType: 'image/png' };
   },
 
   async test(apiKey, model) {
@@ -557,7 +677,7 @@ function initializeActiveTabMap() {
   });
 }
 
-async function runStream(port, requestId, action, text) {
+async function runStream(port, requestId, action, text, imageData) {
   const existing = activeStreams.get(requestId);
   if (existing?.controller) {
     existing.controller.abort();
@@ -568,6 +688,19 @@ async function runStream(port, requestId, action, text) {
 
   try {
     const { adapter, apiKey, config, providerId } = await resolveActiveConfig();
+
+    // Image generation: use the dedicated generateImage method, skip streaming.
+    if (action === 'generate_image') {
+      if (typeof adapter.generateImage !== 'function') {
+        throw new Error('Image generation is not supported by the current provider.');
+      }
+      emitStream(port, requestId, { phase: 'start', provider: providerId, action });
+      const result = await adapter.generateImage(text, apiKey, config);
+      emitStream(port, requestId, { phase: 'image_result', imageDataUrl: result.imageDataUrl, mimeType: result.mimeType, provider: providerId, action });
+      emitStream(port, requestId, { phase: 'end', text: '', provider: providerId, action });
+      return;
+    }
+
     const { prompt, runtimeConfig } = await resolvePromptAndConfig(action, text, config, providerId);
 
     emitStream(port, requestId, { phase: 'start', provider: providerId, action });
@@ -579,18 +712,19 @@ async function runStream(port, requestId, action, text) {
         apiKey,
         runtimeConfig,
         (delta) => emitStream(port, requestId, { phase: 'delta', delta, provider: providerId, action }),
-        abortController.signal
+        abortController.signal,
+        imageData || null
       );
 
       // Fallback for providers/environments where streaming yields no deltas.
       if (!completeText?.trim()) {
-        completeText = await adapter.call(prompt, apiKey, runtimeConfig);
+        completeText = await adapter.call(prompt, apiKey, runtimeConfig, imageData || null);
         if (completeText) {
           emitStream(port, requestId, { phase: 'delta', delta: completeText, provider: providerId, action });
         }
       }
     } else {
-      completeText = await adapter.call(prompt, apiKey, runtimeConfig);
+      completeText = await adapter.call(prompt, apiKey, runtimeConfig, imageData || null);
       emitStream(port, requestId, { phase: 'delta', delta: completeText, provider: providerId, action });
     }
 
@@ -620,12 +754,13 @@ chrome.runtime.onConnect.addListener((port) => {
 
   port.onMessage.addListener((message) => {
     if (message?.type === 'AI_STREAM_START') {
-      const { requestId, action, text } = message;
-      if (!requestId || !action || !text) {
+      const { requestId, action, text, imageData } = message;
+      const hasContent = text || imageData;
+      if (!requestId || !action || !hasContent) {
         emitStream(port, requestId || 'unknown', { phase: 'error', error: 'Invalid stream request payload.' });
         return;
       }
-      runStream(port, requestId, action, text);
+      runStream(port, requestId, action, text || '', imageData || null);
       return;
     }
 
@@ -782,6 +917,8 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
     LANGUAGE_INSTRUCTIONS,
     DEFAULT_PROMPTS,
+    IMAGE_ANALYSIS_ACTIONS,
+    BASE_ACTIONS,
     buildPrompt,
     buildCustomPrompt,
     coerceTemperature,
@@ -789,6 +926,8 @@ if (typeof module !== 'undefined' && module.exports) {
     normalizeActionOverride,
     resolveActionOverride,
     buildRuntimeConfig,
+    geminiAdapter,
+    openaiAdapter,
   };
 }
 

@@ -44,7 +44,14 @@
     apply: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
     stop: `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>`,
     sparkle: `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0L14.59 8.41L23 11L14.59 13.59L12 22L9.41 13.59L1 11L9.41 8.41L12 0Z"/></svg>`,
+    describe_image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`,
+    extract_text: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/></svg>`,
+    analyze_image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg>`,
+    generate_image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/><path d="M14 10l2-2"/></svg>`,
+    download: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
   };
+
+  const IMAGE_ANALYSIS_ACTIONS = new Set(['describe_image', 'extract_text', 'analyze_image']);
 
   const hostEl = document.createElement('div');
   hostEl.id = 'ai-writing-assistant-host';
@@ -104,6 +111,8 @@
     .ai-copy-toast { position: absolute; top: 8px; right: 50px; background: #10b981; color: white; font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 5px; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
     .ai-copy-toast.show { opacity: 1; }
     .ai-menu-btn.disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
+    .ai-result-image { max-width: 100%; border-radius: 8px; display: block; margin: 0 auto; }
+    .ai-result-image-wrap { text-align: center; padding: 4px 0; }
 
     @media (prefers-color-scheme: dark) {
       .ai-menu { background: #1e1e2e; border-color: #313244; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.2); }
@@ -136,6 +145,7 @@
         <div class="ai-copy-toast">Copied!</div>
         <button class="ai-icon-btn" data-role="stop" title="Stop" style="display:none;">${ICONS.stop}</button>
         <button class="ai-icon-btn" data-role="apply" title="Apply result" disabled>${ICONS.apply}</button>
+        <button class="ai-icon-btn" data-role="download" title="Download image" style="display:none;">${ICONS.download}</button>
         <button class="ai-icon-btn" data-role="copy" title="Copy result">${ICONS.copy}</button>
         <button class="ai-icon-btn" data-role="close" title="Close">${ICONS.close}</button>
       </div>
@@ -151,10 +161,13 @@
   const copyToast = results.querySelector('.ai-copy-toast');
   const stopBtn = results.querySelector('[data-role="stop"]');
   const applyBtn = results.querySelector('[data-role="apply"]');
+  const downloadBtn = results.querySelector('[data-role="download"]');
   const closeBtn = results.querySelector('[data-role="close"]');
 
   let loadedCustomActions = [];
   let selectedText = '';
+  let selectedImage = null;    // base64 data URL or external URL of the currently selected image
+  let selectedImageEl = null;  // the <img> element whose image is selected
   let isLoading = false;
   let suppressUiUntil = 0;
   let streamPort = null;
@@ -287,22 +300,66 @@
     applyBtn.disabled = !canApply;
   }
 
+  async function getImageAsDataUrl(imgEl) {
+    if (!imgEl) return null;
+    // Already a data URL — use directly.
+    if (imgEl.src.startsWith('data:')) return imgEl.src;
+    // Try canvas approach (works for same-origin and CORS-enabled images).
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = imgEl.naturalWidth || imgEl.width || 300;
+      canvas.height = imgEl.naturalHeight || imgEl.height || 300;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(imgEl, 0, 0);
+      return canvas.toDataURL('image/jpeg', 0.75);
+    } catch {
+      // Canvas tainted (cross-origin without CORS) — fall back to the src URL.
+      // OpenAI vision accepts direct URLs; Gemini vision requires base64.
+      return imgEl.src || null;
+    }
+  }
+
+  function clearImageSelection() {
+    if (selectedImageEl) {
+      selectedImageEl.style.outline = '';
+      selectedImageEl.style.outlineOffset = '';
+      selectedImageEl = null;
+    }
+    selectedImage = null;
+  }
+
   function buildMenuButtons() {
-    const defaultButtons = [
-      { action: 'grammar', icon: ICONS.grammar, label: 'Grammar' },
-      { action: 'style', icon: ICONS.style, label: 'Style' },
-      { action: 'synonyms', icon: ICONS.synonyms, label: 'Synonyms' },
-    ];
+    let html;
 
-    let html = defaultButtons.map((btn) =>
-      `<button class="ai-menu-btn" data-action="${btn.action}"><span class="icon">${btn.icon}</span>${btn.label}</button>`
-    ).join('<div class="ai-menu-separator"></div>');
-
-    if (loadedCustomActions.length > 0) {
-      html += '<div class="ai-menu-separator"></div>';
-      html += loadedCustomActions.map((ca) =>
-        `<button class="ai-menu-btn" data-action="${ca.id}"><span class="icon" style="font-style:normal;">${ca.icon || '✏️'}</span>${escapeHtml(ca.name)}</button>`
+    if (selectedImage) {
+      // Image analysis mode — show image-specific actions.
+      const imageButtons = [
+        { action: 'describe_image', icon: ICONS.describe_image, label: 'Describe' },
+        { action: 'extract_text', icon: ICONS.extract_text, label: 'Extract Text' },
+        { action: 'analyze_image', icon: ICONS.analyze_image, label: 'Analyze' },
+      ];
+      html = imageButtons.map((btn) =>
+        `<button class="ai-menu-btn" data-action="${btn.action}"><span class="icon">${btn.icon}</span>${btn.label}</button>`
       ).join('<div class="ai-menu-separator"></div>');
+    } else {
+      // Text selection mode — show text actions plus image generation.
+      const defaultButtons = [
+        { action: 'grammar', icon: ICONS.grammar, label: 'Grammar' },
+        { action: 'style', icon: ICONS.style, label: 'Style' },
+        { action: 'synonyms', icon: ICONS.synonyms, label: 'Synonyms' },
+        { action: 'generate_image', icon: ICONS.generate_image, label: 'Generate Image' },
+      ];
+
+      html = defaultButtons.map((btn) =>
+        `<button class="ai-menu-btn" data-action="${btn.action}"><span class="icon">${btn.icon}</span>${btn.label}</button>`
+      ).join('<div class="ai-menu-separator"></div>');
+
+      if (loadedCustomActions.length > 0) {
+        html += '<div class="ai-menu-separator"></div>';
+        html += loadedCustomActions.map((ca) =>
+          `<button class="ai-menu-btn" data-action="${ca.id}"><span class="icon" style="font-style:normal;">${ca.icon || '✏️'}</span>${escapeHtml(ca.name)}</button>`
+        ).join('<div class="ai-menu-separator"></div>');
+      }
     }
 
     menu.innerHTML = html;
@@ -694,6 +751,8 @@
 
   function clearSelectionUi() {
     selectedText = '';
+    clearImageSelection();
+    buildMenuButtons();
 
     // While loading or results are on screen, only close the floating menu.
     // Never wipe the results panel or cancel the stream from a background event.
@@ -707,11 +766,15 @@
 
   function hideAll() {
     cancelActiveStream();
+    clearImageSelection();
+    buildMenuButtons();
     hideMenu();
     hideResults();
     isLoading = false;
     setButtonsDisabled(false);
     stopBtn.style.display = 'none';
+    downloadBtn.style.display = 'none';
+    downloadBtn.dataset.href = '';
     selectionSnapshotForApply = null;
     activeResponseText = '';
     updateApplyButtonState();
@@ -741,6 +804,10 @@
       grammar: 'Checking grammar',
       style: 'Analyzing style',
       synonyms: 'Finding synonyms',
+      describe_image: 'Describing image',
+      extract_text: 'Extracting text',
+      analyze_image: 'Analyzing image',
+      generate_image: 'Generating image',
     };
 
     let label = labels[action];
@@ -751,6 +818,8 @@
 
     resultsTitleText.textContent = label || 'AI Suggestion';
     resultsBody.innerHTML = `<div class="ai-loading"><div class="ai-loading-dots"><span></span><span></span><span></span></div>${label || 'Thinking'}…</div>`;
+    downloadBtn.style.display = 'none';
+    downloadBtn.dataset.href = '';
   }
 
   function showError(message) {
@@ -767,6 +836,10 @@
       grammar: 'Grammar Check',
       style: 'Style Suggestions',
       synonyms: 'Synonyms',
+      describe_image: 'Image Description',
+      extract_text: 'Extracted Text',
+      analyze_image: 'Image Analysis',
+      generate_image: 'Generated Image',
     };
 
     let title = titles[action];
@@ -777,7 +850,37 @@
 
     resultsTitleText.textContent = title || 'AI Suggestion';
     resultsBody.innerHTML = renderSafeMarkdown(content);
+    downloadBtn.style.display = 'none';
     updateApplyButtonState();
+    repositionResults();
+  }
+
+  function showImageResult(action, imageDataUrl) {
+    const titles = {
+      generate_image: 'Generated Image',
+      describe_image: 'Image Description',
+      extract_text: 'Extracted Text',
+      analyze_image: 'Image Analysis',
+    };
+    const title = titles[action] || 'Generated Image';
+    resultsTitleText.textContent = title;
+
+    resultsBody.innerHTML = '';
+    const wrap = document.createElement('div');
+    wrap.className = 'ai-result-image-wrap';
+    const img = document.createElement('img');
+    img.src = imageDataUrl;
+    img.className = 'ai-result-image';
+    img.alt = title;
+    wrap.appendChild(img);
+    resultsBody.appendChild(wrap);
+
+    // Show download button and attach the data URL.
+    downloadBtn.style.display = 'flex';
+    downloadBtn.dataset.href = imageDataUrl;
+
+    // Generated images cannot be applied back to text selections.
+    applyBtn.disabled = true;
     repositionResults();
   }
 
@@ -817,12 +920,21 @@
         return;
       }
 
+      if (message.phase === 'image_result') {
+        console.log('[AWA] image_result received');
+        showImageResult(message.action || 'generate_image', message.imageDataUrl);
+        return;
+      }
+
       if (message.phase === 'end') {
         console.log('[AWA] end — text length', (message.text || activeResponseText).length);
         if (message.text) {
           activeResponseText = message.text;
         }
-        showResultContent(message.action || 'grammar', activeResponseText);
+        // Only update text display if the result wasn't already shown as an image.
+        if (activeResponseText.trim()) {
+          showResultContent(message.action || 'grammar', activeResponseText);
+        }
         isLoading = false;
         setButtonsDisabled(false);
         activeRequestId = null;
@@ -890,7 +1002,11 @@
 
   async function requestAI(action, textOverride, anchorRectOverride) {
     const text = (textOverride || selectedText || '').trim();
-    if (!text) return;
+    const isImageAnalysis = IMAGE_ANALYSIS_ACTIONS.has(action);
+
+    // Image analysis actions need a selected image; all others need text.
+    if (isImageAnalysis && !selectedImage) return;
+    if (!isImageAnalysis && !text) return;
 
     if (isLoading) {
       cancelActiveStream();
@@ -917,12 +1033,14 @@
       const port = ensureStreamPort();
       const requestId = generateRequestId();
       activeRequestId = requestId;
-      console.log('[AWA] sending AI_STREAM_START', requestId, action, 'text len', text.length);
+      const imageData = selectedImage || undefined;
+      console.log('[AWA] sending AI_STREAM_START', requestId, action, 'text len', text.length, 'has image', Boolean(imageData));
       port.postMessage({
         type: 'AI_STREAM_START',
         requestId,
         action,
         text,
+        imageData,
       });
     } catch (err) {
       showError('Extension error: ' + (err.message || 'Unknown error'));
@@ -937,7 +1055,32 @@
     if (Date.now() < suppressUiUntil) return;
     if (hostEl.contains(e.target) || e.target === hostEl) return;
 
-    setTimeout(() => {
+    // Detect clicks on <img> elements.
+    const clickedImg = e.target instanceof HTMLImageElement
+      ? e.target
+      : (e.target instanceof Element ? e.target.closest('img') : null);
+
+    setTimeout(async () => {
+      if (clickedImg && clickedImg.src && !clickedImg.src.startsWith('#')) {
+        // Entering image selection mode.
+        clearImageSelection();
+        selectedText = '';
+        selectedImage = await getImageAsDataUrl(clickedImg);
+        selectedImageEl = clickedImg;
+        // Highlight the selected image.
+        selectedImageEl.style.outline = '2px solid #6366f1';
+        selectedImageEl.style.outlineOffset = '2px';
+        buildMenuButtons();
+        showMenu(clickedImg.getBoundingClientRect());
+        return;
+      }
+
+      // Regular text selection path — clear any image state first.
+      if (selectedImage) {
+        clearImageSelection();
+        buildMenuButtons();
+      }
+
       const payload = getSelectionPayload();
       const text = payload.text;
 
@@ -992,6 +1135,20 @@
       navigator.clipboard.writeText(text).then(() => {
         setToast('Copied!');
       }).catch(() => {});
+      return;
+    }
+
+    if (role === 'download') {
+      const href = button.dataset.href;
+      if (href) {
+        const a = document.createElement('a');
+        a.href = href;
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        a.download = `ai-generated-image-${ts}.png`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }
       return;
     }
 
