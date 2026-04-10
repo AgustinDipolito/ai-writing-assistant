@@ -335,6 +335,7 @@ const webSearchTool = {
       throw new Error('Web search requires a Brave Search API key. Configure it in Options → Tools.');
     }
 
+    // Truncate to 400 characters to stay within Brave Search API query length limits.
     const query = encodeURIComponent(String(input.text || '').substring(0, 400));
     const url = `https://api.search.brave.com/res/v1/web/search?q=${query}&count=${maxResults}`;
 
@@ -393,8 +394,10 @@ async function maybeEnrichPrompt(prompt, text, toolConfig) {
     if (!result.ok || !result.data?.results?.length) return prompt;
     const context = buildSearchResultsContext(result.data);
     return `${context}\n\n${prompt}`;
-  } catch {
+  } catch (err) {
     // Tool failures are non-fatal; fall back to the original prompt.
+    // Log the error so API key issues or network problems surface in the service worker console.
+    console.warn('[AI Writing Assistant] Web search tool failed:', err?.message || err);
     return prompt;
   }
 }

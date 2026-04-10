@@ -645,10 +645,8 @@ webSearchEnabledChk.addEventListener('change', () => {
 
 document.querySelectorAll('.toggle-visibility[data-target="braveApiKey"]').forEach((btn) => {
   btn.addEventListener('click', () => {
-    const input = document.getElementById('braveApiKey');
-    if (!input) return;
-    input.type = input.type === 'password' ? 'text' : 'password';
-    btn.title = input.type === 'password' ? 'Show key' : 'Hide key';
+    braveApiKeyInput.type = braveApiKeyInput.type === 'password' ? 'text' : 'password';
+    btn.title = braveApiKeyInput.type === 'password' ? 'Show key' : 'Hide key';
   });
 });
 
