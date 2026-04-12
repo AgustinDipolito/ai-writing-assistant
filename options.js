@@ -28,6 +28,44 @@ const PROVIDERS = {
       { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (fastest)' },
     ],
   },
+  anthropic: {
+    label: 'Anthropic Claude',
+    defaultModel: 'claude-3-5-haiku-20241022',
+    models: [
+      { value: 'claude-opus-4-5',            label: 'Claude Opus 4.5 (most capable)' },
+      { value: 'claude-sonnet-4-5',          label: 'Claude Sonnet 4.5 (balanced)' },
+      { value: 'claude-3-5-haiku-20241022',  label: 'Claude 3.5 Haiku (fastest)' },
+      { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
+    ],
+  },
+  openrouter: {
+    label: 'OpenRouter',
+    defaultModel: 'openai/gpt-4o-mini',
+    models: [
+      { value: 'openai/gpt-4o-mini',                       label: 'GPT-4o Mini (OpenAI)' },
+      { value: 'openai/gpt-4o',                            label: 'GPT-4o (OpenAI)' },
+      { value: 'anthropic/claude-3-5-haiku',               label: 'Claude 3.5 Haiku (Anthropic)' },
+      { value: 'anthropic/claude-3-5-sonnet',              label: 'Claude 3.5 Sonnet (Anthropic)' },
+      { value: 'google/gemini-2.0-flash-001',              label: 'Gemini 2.0 Flash (Google)' },
+      { value: 'meta-llama/llama-3.3-70b-instruct',        label: 'Llama 3.3 70B (Meta)' },
+      { value: 'mistralai/mistral-small-3.1-24b-instruct', label: 'Mistral Small (Mistral AI)' },
+      { value: 'deepseek/deepseek-chat-v3-0324',           label: 'DeepSeek Chat (DeepSeek)' },
+    ],
+  },
+  ollama: {
+    label: 'Ollama',
+    defaultModel: 'llama3.2',
+    requiresApiKey: false,
+    models: [
+      { value: 'llama3.2', label: 'Llama 3.2 (recommended)' },
+      { value: 'llama3.1', label: 'Llama 3.1' },
+      { value: 'mistral',  label: 'Mistral' },
+      { value: 'phi4',     label: 'Phi-4' },
+      { value: 'gemma3',   label: 'Gemma 3' },
+      { value: 'qwen2.5',  label: 'Qwen 2.5' },
+      { value: 'llava',    label: 'LLaVA (vision)' },
+    ],
+  },
 };
 
 // ============================================================
@@ -36,12 +74,18 @@ const PROVIDERS = {
 
 const providerSelect     = document.getElementById('providerSelect');
 const apiKeyInputs       = {
-  gemini: document.getElementById('apiKey-gemini'),
-  openai: document.getElementById('apiKey-openai'),
+  gemini:      document.getElementById('apiKey-gemini'),
+  openai:      document.getElementById('apiKey-openai'),
+  anthropic:   document.getElementById('apiKey-anthropic'),
+  openrouter:  document.getElementById('apiKey-openrouter'),
 };
+const ollamaBaseUrlInput = document.getElementById('baseUrl-ollama');
 const providerPanels     = {
-  gemini: document.getElementById('panel-gemini'),
-  openai: document.getElementById('panel-openai'),
+  gemini:      document.getElementById('panel-gemini'),
+  openai:      document.getElementById('panel-openai'),
+  anthropic:   document.getElementById('panel-anthropic'),
+  openrouter:  document.getElementById('panel-openrouter'),
+  ollama:      document.getElementById('panel-ollama'),
 };
 const saveBtn            = document.getElementById('save');
 const testBtn            = document.getElementById('test');
@@ -167,6 +211,22 @@ document.querySelectorAll('.toggle-visibility[data-target]').forEach((btn) => {
 
 saveBtn.addEventListener('click', () => {
   const providerId = providerSelect.value;
+
+  // Ollama uses a base URL instead of an API key
+  if (providerId === 'ollama') {
+    const baseUrl = ollamaBaseUrlInput?.value.trim() || 'http://localhost:11434';
+    chrome.storage.local.get('providerConfig', ({ providerConfig }) => {
+      const pc = providerConfig || { activeProvider: providerId };
+      pc.activeProvider = providerId;
+      if (!pc[providerId]) pc[providerId] = {};
+      pc[providerId].baseUrl = baseUrl;
+      chrome.storage.local.set({ providerConfig: pc }, () => {
+        showStatus('success', 'Ollama settings saved!');
+      });
+    });
+    return;
+  }
+
   const apiKey = apiKeyInputs[providerId]?.value.trim();
 
   if (!apiKey) {
@@ -192,11 +252,20 @@ saveBtn.addEventListener('click', () => {
 
 testBtn.addEventListener('click', async () => {
   const providerId = providerSelect.value;
-  const apiKey = apiKeyInputs[providerId]?.value.trim();
+  const provider = PROVIDERS[providerId];
 
-  if (!apiKey) {
-    showStatus('error', 'Please enter an API key first.');
-    return;
+  // Gather provider-specific config to send with the test request
+  const extraConfig = {};
+  let apiKey = '';
+
+  if (providerId === 'ollama') {
+    extraConfig.baseUrl = ollamaBaseUrlInput?.value.trim() || 'http://localhost:11434';
+  } else {
+    apiKey = apiKeyInputs[providerId]?.value.trim() || '';
+    if (!apiKey) {
+      showStatus('error', 'Please enter an API key first.');
+      return;
+    }
   }
 
   testBtn.disabled = true;
@@ -208,13 +277,14 @@ testBtn.addEventListener('click', async () => {
       providerId,
       apiKey,
       model: modelSelect.value,
+      config: extraConfig,
     });
 
     if (response?.error) {
       showStatus('error', `Connection failed: ${response.error}`);
     } else {
       const reply = (response?.result || '').trim().substring(0, 80);
-      showStatus('success', `Connected! ${PROVIDERS[providerId].label} says: "${reply}"`);
+      showStatus('success', `Connected! ${provider.label} says: "${reply}"`);
     }
   } catch (err) {
     showStatus('error', `Extension error: ${err.message || 'Unknown'}`);
@@ -236,11 +306,19 @@ testBtn.addEventListener('click', async () => {
 
 refreshModelsBtn.addEventListener('click', async () => {
   const providerId = providerSelect.value;
-  const apiKey = apiKeyInputs[providerId]?.value.trim();
 
-  if (!apiKey) {
-    showStatus('error', 'Please enter an API key first.');
-    return;
+  // Gather provider-specific config
+  const extraConfig = {};
+  let apiKey = '';
+
+  if (providerId === 'ollama') {
+    extraConfig.baseUrl = ollamaBaseUrlInput?.value.trim() || 'http://localhost:11434';
+  } else {
+    apiKey = apiKeyInputs[providerId]?.value.trim() || '';
+    if (!apiKey) {
+      showStatus('error', 'Please enter an API key first.');
+      return;
+    }
   }
 
   refreshModelsBtn.disabled = true;
@@ -251,6 +329,7 @@ refreshModelsBtn.addEventListener('click', async () => {
       type: 'LIST_MODELS',
       providerId,
       apiKey,
+      config: extraConfig,
     });
 
     if (response?.error) {
@@ -381,8 +460,13 @@ function autoSaveConfig() {
       const pc = providerConfig || { activeProvider: providerId };
       pc.activeProvider = providerId;
       if (!pc[providerId]) pc[providerId] = {};
-      // Merge shared config into the provider's sub-config (preserve apiKey)
+      // Merge shared config into the provider's sub-config (preserve apiKey and baseUrl)
       Object.assign(pc[providerId], shared);
+
+      // Persist Ollama-specific baseUrl
+      if (providerId === 'ollama' && ollamaBaseUrlInput) {
+        pc[providerId].baseUrl = ollamaBaseUrlInput.value.trim() || 'http://localhost:11434';
+      }
 
       chrome.storage.local.set({ providerConfig: pc }, () => {
         configAutoSave.classList.add('show');
@@ -406,6 +490,9 @@ promptGrammar.addEventListener('input', autoSaveConfig);
 promptStyle.addEventListener('input', autoSaveConfig);
 promptSynonyms.addEventListener('input', autoSaveConfig);
 systemInstruction.addEventListener('input', autoSaveConfig);
+if (ollamaBaseUrlInput) {
+  ollamaBaseUrlInput.addEventListener('input', autoSaveConfig);
+}
 ACTION_IDS.forEach((actionId) => {
   const inputs = baseOverrideInputs[actionId];
   if (!inputs) return;
@@ -444,10 +531,15 @@ chrome.storage.local.get('providerConfig', ({ providerConfig }) => {
   providerSelect.value = providerId;
   switchProviderPanel(providerId);
 
-  // Load API keys for all providers
+  // Load API keys for all key-based providers
   Object.keys(apiKeyInputs).forEach((id) => {
     if (pc[id]?.apiKey) apiKeyInputs[id].value = pc[id].apiKey;
   });
+
+  // Load Ollama base URL
+  if (ollamaBaseUrlInput && pc.ollama?.baseUrl) {
+    ollamaBaseUrlInput.value = pc.ollama.baseUrl;
+  }
 
   // Load shared config from active provider's sub-config
   const cfg = pc[providerId] || {};
@@ -529,17 +621,21 @@ function normalizeCustomAction(action) {
     overrides: {},
   };
 
+  const PROVIDER_KEYS = Object.keys(PROVIDERS);
+
   if (action?.overrides && typeof action.overrides === 'object') {
-    if (action.overrides.gemini || action.overrides.openai) {
-      normalized.overrides = {
-        gemini: action.overrides.gemini || {},
-        openai: action.overrides.openai || {},
-      };
+    const hasProviderKeys = PROVIDER_KEYS.some((key) => key in action.overrides);
+    if (hasProviderKeys) {
+      normalized.overrides = {};
+      PROVIDER_KEYS.forEach((key) => {
+        normalized.overrides[key] = action.overrides[key] || {};
+      });
     } else {
-      normalized.overrides = {
-        gemini: action.overrides,
-        openai: {},
-      };
+      // Legacy flat overrides: apply to all providers so existing overrides continue to work
+      normalized.overrides = {};
+      PROVIDER_KEYS.forEach((key) => {
+        normalized.overrides[key] = action.overrides;
+      });
     }
   }
 
