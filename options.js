@@ -631,10 +631,10 @@ function normalizeCustomAction(action) {
         normalized.overrides[key] = action.overrides[key] || {};
       });
     } else {
-      // Legacy flat overrides: map to all providers
+      // Legacy flat overrides: apply to all providers so existing overrides continue to work
       normalized.overrides = {};
       PROVIDER_KEYS.forEach((key) => {
-        normalized.overrides[key] = key === 'gemini' ? action.overrides : {};
+        normalized.overrides[key] = action.overrides;
       });
     }
   }
