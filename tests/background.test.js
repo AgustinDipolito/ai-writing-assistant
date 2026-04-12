@@ -417,3 +417,155 @@ test('openaiAdapter._buildUserContent with a URL (not data URL) passes it throug
   assert.ok(result._visionModel);
   assert.equal(result.content[0].image_url.url, url);
 });
+
+// ============================================================
+// geminiAdapter.listModels
+// ============================================================
+
+test('geminiAdapter.listModels returns models supporting generateContent', async () => {
+  const mockModels = [
+    {
+      name: 'models/gemini-2.0-flash',
+      displayName: 'Gemini 2.0 Flash',
+      supportedGenerationMethods: ['generateContent', 'countTokens'],
+    },
+    {
+      name: 'models/gemini-1.5-pro',
+      displayName: 'Gemini 1.5 Pro',
+      supportedGenerationMethods: ['generateContent', 'streamGenerateContent', 'countTokens'],
+    },
+    {
+      name: 'models/embedding-001',
+      displayName: 'Embedding 001',
+      supportedGenerationMethods: ['embedContent'],
+    },
+  ];
+
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({ models: mockModels }),
+  });
+
+  const result = await geminiAdapter.listModels('test-api-key');
+
+  assert.equal(result.length, 2);
+  assert.equal(result[0].value, 'gemini-2.0-flash');
+  assert.equal(result[0].label, 'Gemini 2.0 Flash');
+  assert.ok(Array.isArray(result[0].supportedMethods));
+  assert.ok(result[0].supportedMethods.includes('generateContent'));
+  assert.equal(result[1].value, 'gemini-1.5-pro');
+
+  delete global.fetch;
+});
+
+test('geminiAdapter.listModels excludes models that do not support generateContent', async () => {
+  const mockModels = [
+    {
+      name: 'models/embedding-001',
+      displayName: 'Embedding 001',
+      supportedGenerationMethods: ['embedContent'],
+    },
+    {
+      name: 'models/aqa',
+      displayName: 'AQA',
+      supportedGenerationMethods: ['createAQA'],
+    },
+  ];
+
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({ models: mockModels }),
+  });
+
+  const result = await geminiAdapter.listModels('test-api-key');
+  assert.equal(result.length, 0);
+
+  delete global.fetch;
+});
+
+test('geminiAdapter.listModels strips "models/" prefix from value', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      models: [
+        {
+          name: 'models/gemini-2.0-flash-lite',
+          displayName: 'Gemini 2.0 Flash Lite',
+          supportedGenerationMethods: ['generateContent'],
+        },
+      ],
+    }),
+  });
+
+  const result = await geminiAdapter.listModels('test-api-key');
+  assert.equal(result[0].value, 'gemini-2.0-flash-lite');
+
+  delete global.fetch;
+});
+
+test('geminiAdapter.listModels falls back to model name when displayName is absent', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      models: [
+        {
+          name: 'models/gemini-custom',
+          supportedGenerationMethods: ['generateContent'],
+        },
+      ],
+    }),
+  });
+
+  const result = await geminiAdapter.listModels('test-api-key');
+  assert.equal(result[0].label, 'gemini-custom');
+
+  delete global.fetch;
+});
+
+test('geminiAdapter.listModels throws on non-ok response', async () => {
+  global.fetch = async () => ({
+    ok: false,
+    status: 403,
+    json: async () => ({ error: { message: 'API key invalid.' } }),
+  });
+
+  await assert.rejects(
+    () => geminiAdapter.listModels('bad-key'),
+    (err) => {
+      assert.ok(err.message.includes('API key invalid.'));
+      return true;
+    }
+  );
+
+  delete global.fetch;
+});
+
+test('geminiAdapter.listModels handles empty models array', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({ models: [] }),
+  });
+
+  const result = await geminiAdapter.listModels('test-api-key');
+  assert.equal(result.length, 0);
+
+  delete global.fetch;
+});
+
+test('geminiAdapter.listModels uses the correct API endpoint', async () => {
+  let capturedUrl;
+  global.fetch = async (url) => {
+    capturedUrl = url;
+    return {
+      ok: true,
+      json: async () => ({ models: [] }),
+    };
+  };
+
+  await geminiAdapter.listModels('my-api-key');
+  assert.ok(capturedUrl.startsWith('https://generativelanguage.googleapis.com/'));
+  assert.ok(capturedUrl.includes('/models'));
+  assert.ok(capturedUrl.includes('my-api-key'));
+
+  delete global.fetch;
+});

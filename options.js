@@ -45,6 +45,8 @@ const providerPanels     = {
 };
 const saveBtn            = document.getElementById('save');
 const testBtn            = document.getElementById('test');
+const refreshModelsBtn   = document.getElementById('refreshModels');
+const modelsHint         = document.getElementById('modelsHint');
 const statusEl           = document.getElementById('status');
 const modelSelect        = document.getElementById('modelSelect');
 const temperatureSlider  = document.getElementById('temperature');
@@ -225,6 +227,68 @@ testBtn.addEventListener('click', async () => {
         <polyline points="22 4 12 14.01 9 11.01"/>
       </svg>
       Test Connection`;
+  }
+});
+
+// ============================================================
+// 7b. REFRESH MODELS
+// ============================================================
+
+refreshModelsBtn.addEventListener('click', async () => {
+  const providerId = providerSelect.value;
+  const apiKey = apiKeyInputs[providerId]?.value.trim();
+
+  if (!apiKey) {
+    showStatus('error', 'Please enter an API key first.');
+    return;
+  }
+
+  refreshModelsBtn.disabled = true;
+  refreshModelsBtn.textContent = 'Loading…';
+
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: 'LIST_MODELS',
+      providerId,
+      apiKey,
+    });
+
+    if (response?.error) {
+      showStatus('error', `Failed to fetch models: ${response.error}`);
+    } else {
+      const models = response?.models || [];
+      if (models.length === 0) {
+        showStatus('error', 'No supported models found for this API key.');
+      } else {
+        const currentValue = modelSelect.value;
+        modelSelect.innerHTML = '';
+        models.forEach((m) => {
+          const opt = document.createElement('option');
+          opt.value = m.value;
+          opt.textContent = m.label;
+          opt.selected = m.value === currentValue;
+          modelSelect.appendChild(opt);
+        });
+        const countLabel = `${models.length} model${models.length !== 1 ? 's' : ''}`;
+        if (modelsHint) {
+          modelsHint.textContent = `${countLabel} available.`;
+        }
+        showStatus('success', `Loaded ${countLabel}.`);
+        autoSaveConfig();
+      }
+    }
+  } catch (err) {
+    showStatus('error', `Extension error: ${err.message || 'Unknown'}`);
+  } finally {
+    refreshModelsBtn.disabled = false;
+    refreshModelsBtn.innerHTML = `
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+          stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 4 23 10 17 10"/>
+        <polyline points="1 20 1 14 7 14"/>
+        <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+      </svg>
+      Refresh Models`;
   }
 });
 
