@@ -114,6 +114,14 @@
     .ai-menu-btn.disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
     .ai-result-image { max-width: 100%; border-radius: 8px; display: block; margin: 0 auto; }
     .ai-result-image-wrap { text-align: center; padding: 4px 0; }
+    .ai-menu--setup { flex-direction: column; align-items: stretch; gap: 6px; padding: 12px 14px; min-width: 210px; max-width: 270px; }
+    .ai-setup-title { font-size: 12px; font-weight: 700; color: #374151; }
+    .ai-setup-hint { font-size: 11.5px; color: #64748b; }
+    .ai-setup-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+    .ai-setup-chip { all: unset; display: inline-flex; align-items: center; padding: 4px 9px; border-radius: 6px; font-size: 11.5px; font-weight: 500; background: #f1f5f9; color: #374151; cursor: pointer; transition: background 0.15s; box-sizing: border-box; }
+    .ai-setup-chip:hover { background: #e2e8f0; }
+    .ai-setup-chip:disabled { opacity: 0.5; cursor: not-allowed; }
+    .ai-setup-loading { font-size: 12px; color: #64748b; display: flex; align-items: center; gap: 8px; padding: 2px 0; }
 
     @media (prefers-color-scheme: dark) {
       .ai-menu { background: #1e1e2e; border-color: #313244; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.2); }
@@ -130,6 +138,11 @@
       .ai-results-body th { background: #2a2a3a; }
       .ai-results-body a { color: #a5b4fc; }
       .ai-error { color: #f87171; background: #2d1b1b; border-color: #5c2020; }
+      .ai-setup-title { color: #cdd6f4; }
+      .ai-setup-hint { color: #a6adc8; }
+      .ai-setup-chip { background: #313244; color: #cdd6f4; }
+      .ai-setup-chip:hover { background: #45475a; }
+      .ai-setup-loading { color: #a6adc8; }
     }
   `;
   shadow.appendChild(styleEl);
@@ -330,10 +343,29 @@
     selectedImage = null;
   }
 
+  const SETUP_CATEGORIES = [
+    { category: 'Email & Communication', label: '📧 Email' },
+    { category: 'Writing & Editing', label: '✍️ Writing' },
+    { category: 'Social Media', label: '📱 Social' },
+    { category: 'Business & Productivity', label: '📊 Business' },
+    { category: 'Code & Tech', label: '💻 Code' },
+    { category: 'Academic & Research', label: '🎓 Academic' },
+    { category: 'Marketing & Sales', label: '🛍️ Marketing' },
+    { category: 'Customer Service', label: '🤝 Support' },
+  ];
+
+  function buildSetupHtml() {
+    const chips = SETUP_CATEGORIES
+      .map((c) => `<button class="ai-setup-chip" data-category="${escapeAttr(c.category)}">${c.label}</button>`)
+      .join('');
+    return `<div class="ai-setup-title">✨ Create your first actions</div><div class="ai-setup-hint">Pick a category to generate 3 actions:</div><div class="ai-setup-chips">${chips}</div>`;
+  }
+
   function buildMenuButtons() {
     let html;
 
     if (selectedImage) {
+      menu.classList.remove('ai-menu--setup');
       // Image analysis mode — show image-specific actions.
       const imageButtons = [
         { action: 'describe_image', icon: ICONS.describe_image, label: 'Describe' },
@@ -344,23 +376,17 @@
         `<button class="ai-menu-btn" data-action="${btn.action}"><span class="icon">${btn.icon}</span>${btn.label}</button>`
       ).join('<div class="ai-menu-separator"></div>');
     } else {
-      // Text selection mode — show text actions plus image generation.
-      const defaultButtons = [
-        { action: 'grammar', icon: ICONS.grammar, label: 'Grammar' },
-        { action: 'style', icon: ICONS.style, label: 'Style' },
-        { action: 'synonyms', icon: ICONS.synonyms, label: 'Synonyms' },
-        { action: 'generate_image', icon: ICONS.generate_image, label: 'Generate Image' },
-      ];
+      // Text selection mode — show custom actions only.
+      const visibleCustomActions = loadedCustomActions.filter((ca) => !ca.hidden);
 
-      html = defaultButtons.map((btn) =>
-        `<button class="ai-menu-btn" data-action="${btn.action}"><span class="icon">${btn.icon}</span>${btn.label}</button>`
-      ).join('<div class="ai-menu-separator"></div>');
-
-      if (loadedCustomActions.length > 0) {
-        html += '<div class="ai-menu-separator"></div>';
-        html += loadedCustomActions.map((ca) =>
+      if (visibleCustomActions.length > 0) {
+        menu.classList.remove('ai-menu--setup');
+        html = visibleCustomActions.map((ca) =>
           `<button class="ai-menu-btn" data-action="${ca.id}"><span class="icon" style="font-style:normal;">${ca.icon || '✏️'}</span>${escapeHtml(ca.name)}</button>`
         ).join('<div class="ai-menu-separator"></div>');
+      } else {
+        menu.classList.add('ai-menu--setup');
+        html = buildSetupHtml();
       }
     }
 
@@ -378,6 +404,48 @@
       buildMenuButtons();
     }
   });
+
+  function handleFirstUseSetup(category) {
+    menu.innerHTML = `<div class="ai-setup-title">✨ Generating actions…</div><div class="ai-setup-loading"><div class="ai-loading-dots"><span></span><span></span><span></span></div>${escapeHtml(category)}</div>`;
+
+    chrome.runtime.sendMessage({ type: 'GENERATE_ACTIONS', category }, (response) => {
+      if (chrome.runtime.lastError || response?.error) {
+        const msg = response?.error || chrome.runtime.lastError?.message || 'An error occurred.';
+        menu.innerHTML = `<div class="ai-setup-title">⚠️ Could not generate actions</div><div class="ai-setup-hint">${escapeHtml(msg)}</div><div class="ai-setup-chips"><button class="ai-setup-chip" data-role="open-settings">Open Settings</button><button class="ai-setup-chip" data-category="${escapeAttr(category)}">Try again</button></div>`;
+        return;
+      }
+
+      const suggestions = response?.suggestions || [];
+      if (suggestions.length === 0) {
+        menu.innerHTML = `<div class="ai-setup-title">⚠️ No suggestions returned</div><div class="ai-setup-chips"><button class="ai-setup-chip" data-role="rebuild-setup">Pick another category</button></div>`;
+        return;
+      }
+
+      let counter = 0;
+      const first3 = suggestions.slice(0, 3).map((s) => ({
+        id: 'custom_' + Date.now().toString(36) + '_' + (counter++).toString(36) + '_' + Math.random().toString(36).substring(2, 7),
+        name: s.name || 'Custom Action',
+        icon: s.icon || '✏️',
+        prompt: s.prompt || '',
+        overrides: {},
+        hidden: false,
+      }));
+
+      chrome.storage.local.get('customActions', ({ customActions: existing }) => {
+        const merged = [...(existing || []), ...first3];
+        chrome.storage.local.set({ customActions: merged });
+        // The storage onChanged listener will rebuild the menu automatically.
+      });
+    });
+  }
+
+  function escapeAttr(text) {
+    return String(text)
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
 
   function escapeHtml(text) {
     return String(text)
@@ -1107,10 +1175,25 @@
 
   menu.addEventListener('click', (e) => {
     const button = getClickedButton(e, '.ai-menu-btn');
-    if (!button || button.classList.contains('disabled')) return;
+    if (button && !button.classList.contains('disabled')) {
+      const action = button.dataset.action;
+      if (action) requestAI(action);
+      return;
+    }
 
-    const action = button.dataset.action;
-    if (action) requestAI(action);
+    const setupChip = getClickedButton(e, '.ai-setup-chip');
+    if (setupChip && !setupChip.disabled) {
+      const category = setupChip.dataset.category;
+      const role = setupChip.dataset.role;
+      if (category) {
+        handleFirstUseSetup(category);
+      } else if (role === 'open-settings') {
+        chrome.runtime.sendMessage({ type: 'OPEN_OPTIONS' });
+        hideMenu();
+      } else if (role === 'rebuild-setup') {
+        menu.innerHTML = buildSetupHtml();
+      }
+    }
   });
 
   results.addEventListener('click', (e) => {

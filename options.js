@@ -621,6 +621,7 @@ function normalizeCustomAction(action) {
     icon: action?.icon || '✏️',
     prompt: String(action?.prompt || ''),
     overrides: {},
+    hidden: action?.hidden === true,
   };
 
   const PROVIDER_KEYS = Object.keys(PROVIDERS);
@@ -659,10 +660,13 @@ function renderActionCards() {
   const providerId = providerSelect.value;
 
   customActionsList.innerHTML = customActions.map((action, index) => `
-    <div class="custom-action-card" data-index="${index}">
+    <div class="custom-action-card${action.hidden ? ' is-hidden' : ''}" data-index="${index}">
       <div class="card-header">
         <span class="card-number">#${index + 1}</span>
-        <button class="btn-remove" type="button" data-index="${index}">Remove</button>
+        <div class="card-header-actions">
+          <button class="btn-toggle-hidden" type="button" data-index="${index}" aria-label="${action.hidden ? 'Show action in menu' : 'Hide action from menu'}" aria-pressed="${action.hidden}" title="${action.hidden ? 'Show in menu' : 'Hide from menu'}">${action.hidden ? '🙈 Hidden' : '👁️ Visible'}</button>
+          <button class="btn-remove" type="button" data-index="${index}">Remove</button>
+        </div>
       </div>
       <div class="card-fields">
         <div>
@@ -748,7 +752,7 @@ function syncCardsToData() {
 
 addCustomActionBtn.addEventListener('click', () => {
   syncCardsToData();
-  customActions.push({ id: generateId(), name: '', icon: '✏️', prompt: '', overrides: {} });
+  customActions.push({ id: generateId(), name: '', icon: '✏️', prompt: '', overrides: {}, hidden: false });
   renderActionCards();
   const lastCard = customActionsList.querySelector('.custom-action-card:last-child');
   if (lastCard) lastCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -759,6 +763,14 @@ customActionsList.addEventListener('click', (e) => {
   if (removeBtn) {
     syncCardsToData();
     customActions.splice(parseInt(removeBtn.dataset.index, 10), 1);
+    renderActionCards();
+    return;
+  }
+  const toggleHiddenBtn = e.target.closest('.btn-toggle-hidden');
+  if (toggleHiddenBtn) {
+    syncCardsToData();
+    const index = parseInt(toggleHiddenBtn.dataset.index, 10);
+    customActions[index].hidden = !customActions[index].hidden;
     renderActionCards();
     return;
   }
@@ -906,6 +918,7 @@ generatorResults.addEventListener('click', (e) => {
       icon:     s.icon  || '✏️',
       prompt:   s.prompt || '',
       overrides: {},
+      hidden: false,
     });
     renderActionCards();
 
