@@ -283,6 +283,23 @@ const geminiAdapter = {
     const data = await response.json();
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   },
+
+  async listModels(apiKey) {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
+    const response = await fetch(url);
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Gemini API error (HTTP ${response.status})`);
+    }
+    const data = await response.json();
+    return (data.models || [])
+      .filter((m) => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+      .map((m) => ({
+        value: m.name.replace(/^models\//, ''),
+        label: m.displayName || m.name.replace(/^models\//, ''),
+        supportedMethods: m.supportedGenerationMethods,
+      }));
+  },
 };
 
 const openaiAdapter = {
@@ -798,6 +815,32 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         sendResponse({ result: reply });
       } catch (err) {
         sendResponse({ error: err.message || 'Connection test failed.' });
+      }
+    })();
+
+    return true;
+  }
+
+  if (message.type === 'LIST_MODELS') {
+    const { providerId, apiKey } = message;
+    const adapter = PROVIDERS[providerId];
+
+    if (!adapter) {
+      sendResponse({ error: `Unknown provider: "${providerId}"` });
+      return false;
+    }
+
+    if (typeof adapter.listModels !== 'function') {
+      sendResponse({ error: `Provider "${providerId}" does not support listing models.` });
+      return false;
+    }
+
+    (async () => {
+      try {
+        const models = await adapter.listModels(apiKey);
+        sendResponse({ models });
+      } catch (err) {
+        sendResponse({ error: err.message || 'Failed to list models.' });
       }
     })();
 
