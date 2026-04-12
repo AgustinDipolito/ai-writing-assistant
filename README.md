@@ -64,6 +64,30 @@ Get your API key:
 - Gemini: https://aistudio.google.com/app/apikey
 - OpenAI: https://platform.openai.com/api-keys
 
+### Google Account (optional)
+
+Signing in with your Google account enables upcoming features such as usage history, personalised settings sync, and payments. The extension uses the [Chrome Identity API](https://developer.chrome.com/docs/extensions/reference/identity/) to authenticate with your Google account — no password is ever typed into the extension.
+
+To enable Google Sign-In you need to register an OAuth 2.0 client in Google Cloud Console and add the resulting client ID to `manifest.json`:
+
+1. Go to [Google Cloud Console → APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials).
+2. Click **Create credentials → OAuth 2.0 Client ID**.
+3. Select **Chrome App** as the application type.
+4. Enter your extension's ID (visible in `chrome://extensions/` after loading it unpacked) and click **Create**.
+5. Copy the generated client ID (ends in `.apps.googleusercontent.com`).
+6. Open `manifest.json` and replace the placeholder value:
+
+```json
+"oauth2": {
+    "client_id": "YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": ["openid", "email", "profile"]
+}
+```
+
+7. Reload the extension in `chrome://extensions/`.
+
+After reloading, the **Account** section in the Options page will show a **Sign in with Google** button. Clicking it opens the standard Google consent screen. On success the user's name, email, and profile picture are stored locally in `chrome.storage.local` under the key `googleUser`.
+
 ---
 
 ## Usage

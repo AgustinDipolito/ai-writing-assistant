@@ -1261,6 +1261,70 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'GOOGLE_SIGN_IN') {
+    const manifest = chrome.runtime.getManifest();
+    const clientId = manifest.oauth2?.client_id || '';
+    if (!clientId || clientId.startsWith('YOUR_GOOGLE_OAUTH')) {
+      sendResponse({ error: 'Google OAuth client ID is not configured. See the README for setup instructions.' });
+      return false;
+    }
+
+    chrome.identity.getAuthToken({ interactive: true }, async (token) => {
+      if (chrome.runtime.lastError || !token) {
+        sendResponse({ error: chrome.runtime.lastError?.message || 'Sign-in cancelled.' });
+        return;
+      }
+      try {
+        const resp = await fetch('https://www.googleapis.com/oauth2/v1/userinfo', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const user = await resp.json();
+        const userData = {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          picture: user.picture,
+        };
+        await chrome.storage.local.set({ googleUser: userData });
+        sendResponse({ user: userData });
+      } catch (err) {
+        sendResponse({ error: err.message || 'Failed to fetch user info.' });
+      }
+    });
+    return true;
+  }
+
+  if (message.type === 'GOOGLE_SIGN_OUT') {
+    chrome.identity.getAuthToken({ interactive: false }, (token) => {
+      const cleanup = () => {
+        chrome.storage.local.remove('googleUser', () => {
+          sendResponse({ success: true });
+        });
+      };
+      if (chrome.runtime.lastError || !token) {
+        cleanup();
+        return;
+      }
+      chrome.identity.removeCachedAuthToken({ token }, () => {
+        fetch('https://oauth2.googleapis.com/revoke', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `token=${encodeURIComponent(token)}`,
+        }).catch(() => {});
+        cleanup();
+      });
+    });
+    return true;
+  }
+
+  if (message.type === 'GET_AUTH_STATE') {
+    chrome.storage.local.get('googleUser', ({ googleUser }) => {
+      sendResponse({ user: googleUser || null });
+    });
+    return true;
+  }
+
   if (message.type !== 'AI_REQUEST') return false;
 
   const { action, text } = message;
