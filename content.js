@@ -356,7 +356,7 @@
 
   function buildSetupHtml() {
     const chips = SETUP_CATEGORIES
-      .map((c) => `<button class="ai-setup-chip" data-category="${escapeAttr(c.category)}">${c.label}</button>`)
+      .map((c) => `<button class="ai-setup-chip" data-category="${escapeAttr(c.category)}">${escapeHtml(c.label)}</button>`)
       .join('');
     return `<div class="ai-setup-title">✨ Create your first actions</div><div class="ai-setup-hint">Pick a category to generate 3 actions:</div><div class="ai-setup-chips">${chips}</div>`;
   }
@@ -439,19 +439,15 @@
     });
   }
 
-  function escapeAttr(text) {
-    return String(text)
-      .replace(/&/g, '&amp;')
-      .replace(/"/g, '&quot;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
-  }
-
   function escapeHtml(text) {
     return String(text)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
+  }
+
+  function escapeAttr(text) {
+    return escapeHtml(text).replace(/"/g, '&quot;');
   }
 
   function sanitizeRenderedHtml(inputHtml) {
