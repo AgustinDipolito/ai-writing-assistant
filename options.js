@@ -556,6 +556,8 @@ chrome.storage.local.get('providerConfig', ({ providerConfig }) => {
 
   updateFooter(providerId, cfg.model);
   expandCollapsibleIfFilled();
+  // Refresh generator availability after API keys are populated from storage
+  if (typeof updateGeneratorAvailability === 'function') updateGeneratorAvailability();
 });
 
 // ============================================================
@@ -815,3 +817,179 @@ chrome.storage.local.get('customActions', ({ customActions: saved }) => {
   customActions = (saved || []).map(normalizeCustomAction);
   renderActionCards();
 });
+
+// ============================================================
+// 13. AI ACTION GENERATOR
+// ============================================================
+
+const generatorNoKey       = document.getElementById('generatorNoKey');
+const generatorCategories  = document.getElementById('generatorCategories');
+const generatorLoading     = document.getElementById('generatorLoading');
+const generatingLabel      = document.getElementById('generatingCategoryLabel');
+const generatorResults     = document.getElementById('generatorResults');
+
+let activeGeneratorCategory = null;
+
+/**
+ * Check whether the active provider has a usable API key (or is Ollama which
+ * needs no key) and update the generator UI accordingly.
+ */
+function updateGeneratorAvailability() {
+  const providerId = providerSelect.value;
+  const provider   = PROVIDERS[providerId];
+  const needsKey   = provider?.requiresApiKey !== false;
+  const hasKey     = needsKey
+    ? !!(apiKeyInputs[providerId]?.value.trim())
+    : true;
+
+  if (hasKey) {
+    generatorNoKey.style.display      = 'none';
+    generatorCategories.style.display = '';
+  } else {
+    generatorNoKey.style.display      = '';
+    generatorCategories.style.display = 'none';
+    generatorLoading.style.display    = 'none';
+    generatorResults.style.display    = 'none';
+  }
+}
+
+function escapeHtmlSuggestion(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function renderSuggestions(suggestions, category) {
+  if (!suggestions || suggestions.length === 0) {
+    generatorResults.innerHTML = `<div class="empty-state">No suggestions returned. Try again.</div>`;
+    generatorResults.style.display = '';
+    return;
+  }
+
+  generatorResults.innerHTML = suggestions.map((s, i) => `
+    <div class="suggestion-card" data-index="${i}">
+      <div class="suggestion-icon">${escapeHtmlSuggestion(s.icon || '✏️')}</div>
+      <div class="suggestion-body">
+        <div class="suggestion-name">${escapeHtmlSuggestion(s.name || 'Untitled Action')}</div>
+        <div class="suggestion-prompt-preview">${escapeHtmlSuggestion(s.prompt || '')}</div>
+      </div>
+      <div class="suggestion-actions">
+        <button class="btn-add-suggestion" type="button" data-index="${i}" title="Add this action to your custom actions list">+ Add</button>
+        <button class="btn-copy-prompt" type="button" data-index="${i}" title="Copy prompt to clipboard">Copy</button>
+      </div>
+    </div>
+  `).join('');
+
+  generatorResults.style.display = '';
+
+  // Store suggestions on the container for event delegation
+  generatorResults._suggestions = suggestions;
+  generatorResults._category    = category;
+}
+
+generatorResults.addEventListener('click', (e) => {
+  const addBtn  = e.target.closest('.btn-add-suggestion');
+  const copyBtn = e.target.closest('.btn-copy-prompt');
+
+  if (addBtn) {
+    const idx        = parseInt(addBtn.dataset.index, 10);
+    const suggestions = generatorResults._suggestions || [];
+    const s          = suggestions[idx];
+    if (!s) return;
+
+    syncCardsToData();
+    customActions.push({
+      id:       generateId(),
+      name:     s.name  || '',
+      icon:     s.icon  || '✏️',
+      prompt:   s.prompt || '',
+      overrides: {},
+    });
+    renderActionCards();
+
+    // Scroll to the newly added card and briefly highlight it
+    const lastCard = customActionsList.querySelector('.custom-action-card:last-child');
+    if (lastCard) {
+      lastCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      lastCard.style.borderColor = 'var(--accent)';
+      setTimeout(() => { lastCard.style.borderColor = ''; }, 1500);
+    }
+
+    addBtn.textContent = '✓ Added';
+    addBtn.disabled    = true;
+    showStatus('success', `"${s.name}" added — remember to save!`, customActionsStatusEl);
+    return;
+  }
+
+  if (copyBtn) {
+    const idx         = parseInt(copyBtn.dataset.index, 10);
+    const suggestions  = generatorResults._suggestions || [];
+    const s           = suggestions[idx];
+    if (!s) return;
+
+    navigator.clipboard.writeText(s.prompt || '').then(() => {
+      const original    = copyBtn.textContent;
+      copyBtn.textContent = '✓ Copied';
+      setTimeout(() => { copyBtn.textContent = original; }, 1500);
+    }).catch(() => {
+      showStatus('error', 'Could not copy to clipboard.', customActionsStatusEl);
+    });
+  }
+});
+
+generatorCategories.addEventListener('click', (e) => {
+  const chip = e.target.closest('.category-chip');
+  if (!chip || chip.disabled) return;
+
+  const category = chip.dataset.category;
+  if (!category) return;
+
+  // Toggle: clicking the active chip clears results
+  if (activeGeneratorCategory === category) {
+    activeGeneratorCategory = null;
+    chip.classList.remove('active');
+    generatorResults.style.display = 'none';
+    generatorResults.innerHTML     = '';
+    return;
+  }
+
+  // Mark chip as active
+  generatorCategories.querySelectorAll('.category-chip').forEach((c) => c.classList.remove('active'));
+  chip.classList.add('active');
+  activeGeneratorCategory = category;
+
+  // Disable all chips while loading
+  generatorCategories.querySelectorAll('.category-chip').forEach((c) => { c.disabled = true; });
+
+  // Show loading state
+  generatingLabel.textContent    = category;
+  generatorLoading.style.display = '';
+  generatorResults.style.display = 'none';
+  generatorResults.innerHTML     = '';
+
+  chrome.runtime.sendMessage({ type: 'GENERATE_ACTIONS', category }, (response) => {
+    // Re-enable chips
+    generatorCategories.querySelectorAll('.category-chip').forEach((c) => { c.disabled = false; });
+    generatorLoading.style.display = 'none';
+
+    if (response?.error) {
+      showStatus('error', `Generation failed: ${response.error}`, customActionsStatusEl);
+      chip.classList.remove('active');
+      activeGeneratorCategory = null;
+      return;
+    }
+
+    renderSuggestions(response?.suggestions || [], category);
+  });
+});
+
+// Update availability on initial load and whenever the provider or API key changes
+updateGeneratorAvailability();
+
+Object.keys(apiKeyInputs).forEach((id) => {
+  apiKeyInputs[id]?.addEventListener('input', updateGeneratorAvailability);
+});
+
+providerSelect.addEventListener('change', updateGeneratorAvailability);

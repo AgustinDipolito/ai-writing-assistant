@@ -39,6 +39,7 @@ const {
   buildPrompt,
   buildCustomPrompt,
   buildEnhancePrompt,
+  buildGenerateActionsPrompt,
   coerceTemperature,
   coerceMaxTokens,
   normalizeActionOverride,
@@ -189,6 +190,38 @@ test('buildEnhancePrompt omits action name section when not provided', () => {
   const prompt = buildEnhancePrompt('', 'Existing prompt');
   assert.ok(!prompt.includes('Action Name'));
   assert.ok(prompt.includes('Existing prompt'));
+});
+
+// ============================================================
+// buildGenerateActionsPrompt
+// ============================================================
+
+test('buildGenerateActionsPrompt returns a string', () => {
+  const result = buildGenerateActionsPrompt('Marketing & Sales');
+  assert.equal(typeof result, 'string');
+});
+
+test('buildGenerateActionsPrompt includes the category name', () => {
+  const result = buildGenerateActionsPrompt('Email & Communication');
+  assert.ok(result.includes('Email & Communication'));
+});
+
+test('buildGenerateActionsPrompt includes {{TEXT}} placeholder instruction', () => {
+  const result = buildGenerateActionsPrompt('Writing & Editing');
+  assert.ok(result.includes('{{TEXT}}'));
+});
+
+test('buildGenerateActionsPrompt includes JSON format instructions', () => {
+  const result = buildGenerateActionsPrompt('Social Media');
+  assert.ok(result.includes('"name"'));
+  assert.ok(result.includes('"icon"'));
+  assert.ok(result.includes('"prompt"'));
+});
+
+test('buildGenerateActionsPrompt works with empty category string', () => {
+  const result = buildGenerateActionsPrompt('');
+  assert.equal(typeof result, 'string');
+  assert.ok(result.length > 0);
 });
 
 
