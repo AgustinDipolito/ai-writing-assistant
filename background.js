@@ -804,6 +804,11 @@ chrome.runtime.onConnect.addListener((port) => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message.type === 'OPEN_OPTIONS') {
+    chrome.runtime.openOptionsPage();
+    return false;
+  }
+
   if (message.type === 'TEST_CONNECTION') {
     const { providerId, apiKey, model } = message;
     const adapter = PROVIDERS[providerId];
