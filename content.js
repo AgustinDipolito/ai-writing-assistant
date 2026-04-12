@@ -767,6 +767,9 @@
   }
 
   function hideAll() {
+    selectedText = '';
+    suppressUiUntil = Date.now() + 300;
+    try { window.getSelection()?.removeAllRanges(); } catch { /* no-op */ }
     cancelActiveStream();
     clearImageSelection();
     buildMenuButtons();
