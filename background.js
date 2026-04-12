@@ -161,6 +161,21 @@ Your task is to write an enhanced, detailed prompt template for this action that
 Return ONLY the prompt template text, with no introduction, explanation, or commentary. The template must include {{TEXT}} at least once.`;
 }
 
+function buildGenerateActionsPrompt(category) {
+  return `You are an expert at creating custom AI writing assistant actions for productivity tools.
+
+Generate exactly 5 unique and immediately useful custom action suggestions for the "${category}" category.
+
+Each suggestion must be a specific, practical writing action that helps someone working in the "${category}" domain.
+
+Return your response as a valid JSON array with exactly 5 objects, each containing:
+- "name": Short action name (2-4 words, title case, e.g. "Formalize Tone", "Write Reply")
+- "icon": Single emoji that best represents this action
+- "prompt": A detailed prompt template. Must include {{TEXT}} as the placeholder for the selected text. Clearly define the AI role, the task, and the desired output format.
+
+Return ONLY the raw JSON array. No markdown code fences, no introduction, no commentary.`;
+}
+
 function supportsGeneration(model) {
   return Array.isArray(model.supportedGenerationMethods) && model.supportedGenerationMethods.includes('generateContent');
 }
@@ -1325,6 +1340,35 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'GENERATE_ACTIONS') {
+    const { category } = message;
+
+    (async () => {
+      try {
+        const { adapter, apiKey, config } = await resolveActiveConfig();
+        const prompt = buildGenerateActionsPrompt(category || 'Writing & Editing');
+        const rawResult = await adapter.call(prompt, apiKey, config);
+        const text = (rawResult || '').trim();
+        const jsonStart = text.indexOf('[');
+        const jsonEnd = text.lastIndexOf(']');
+        if (jsonStart === -1 || jsonEnd === -1) {
+          sendResponse({ error: 'AI returned an unexpected format. Please try again.' });
+          return;
+        }
+        const suggestions = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+        if (!Array.isArray(suggestions) || suggestions.length === 0) {
+          sendResponse({ error: 'AI returned no suggestions. Please try again.' });
+          return;
+        }
+        sendResponse({ suggestions });
+      } catch (err) {
+        sendResponse({ error: err.message || 'Failed to generate actions.' });
+      }
+    })();
+
+    return true;
+  }
+
   if (message.type !== 'AI_REQUEST') return false;
 
   const { action, text } = message;
@@ -1443,6 +1487,7 @@ if (typeof module !== 'undefined' && module.exports) {
     buildPrompt,
     buildCustomPrompt,
     buildEnhancePrompt,
+    buildGenerateActionsPrompt,
     coerceTemperature,
     coerceMaxTokens,
     normalizeActionOverride,
