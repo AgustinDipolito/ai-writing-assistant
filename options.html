@@ -591,6 +591,181 @@
             padding: 7px 9px;
             font-size: 12px;
         }
+
+        /* ===== AI Action Generator ===== */
+
+        .generator-section {
+            margin-bottom: 4px;
+        }
+
+        .generator-section-header {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 6px;
+        }
+
+        .generator-no-key {
+            background: var(--bg-secondary);
+            border: 1.5px dashed var(--border);
+            border-radius: 8px;
+            padding: 12px 14px;
+            font-size: 12.5px;
+            color: var(--text-secondary);
+            text-align: center;
+        }
+
+        .category-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 7px;
+            margin-bottom: 12px;
+        }
+
+        .category-chip {
+            background: var(--bg-secondary);
+            border: 1.5px solid var(--border);
+            color: var(--text);
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 12.5px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: border-color 0.15s, background 0.15s, color 0.15s;
+            white-space: nowrap;
+        }
+
+        .category-chip:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
+
+        .category-chip.active {
+            background: var(--accent);
+            border-color: var(--accent);
+            color: #fff;
+        }
+
+        .category-chip:disabled {
+            opacity: 0.45;
+            cursor: not-allowed;
+        }
+
+        .generator-loading {
+            display: flex;
+            align-items: center;
+            gap: 9px;
+            padding: 12px 0;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .generator-spinner {
+            width: 16px;
+            height: 16px;
+            border: 2.5px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: generatorSpin 0.7s linear infinite;
+            flex-shrink: 0;
+        }
+
+        @keyframes generatorSpin {
+            to { transform: rotate(360deg); }
+        }
+
+        .suggestions-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+
+        .suggestion-card {
+            background: var(--bg-secondary);
+            border: 1.5px solid var(--border);
+            border-radius: 10px;
+            padding: 11px 13px;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            transition: border-color 0.15s;
+        }
+
+        .suggestion-card:hover {
+            border-color: var(--accent);
+        }
+
+        .suggestion-icon {
+            font-size: 22px;
+            flex-shrink: 0;
+            line-height: 1;
+            margin-top: 1px;
+        }
+
+        .suggestion-body {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .suggestion-name {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+            margin-bottom: 3px;
+        }
+
+        .suggestion-prompt-preview {
+            font-size: 11.5px;
+            color: var(--text-secondary);
+            overflow: hidden;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            line-height: 1.45;
+        }
+
+        .suggestion-actions {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            flex-shrink: 0;
+        }
+
+        .btn-add-suggestion {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11.5px;
+            font-weight: 700;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: opacity 0.15s;
+        }
+
+        .btn-add-suggestion:hover {
+            opacity: 0.88;
+        }
+
+        .btn-copy-prompt {
+            background: none;
+            color: var(--text-secondary);
+            border: 1.5px solid var(--border);
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 11.5px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: border-color 0.15s, color 0.15s;
+        }
+
+        .btn-copy-prompt:hover {
+            border-color: var(--accent);
+            color: var(--accent);
+        }
     </style>
 </head>
 
@@ -926,6 +1101,43 @@
         Create your own action buttons that appear in the floating menu.
         Each action uses a custom prompt template. Use <code>{{TEXT}}</code> as a placeholder for the selected text.
     </p>
+
+    <!-- ===== AI Action Generator ===== -->
+    <div class="generator-section" id="actionGeneratorSection">
+        <div class="generator-section-header">
+            <span style="font-size:13px; font-weight:700; color:var(--text);">✨ Generate Actions with AI</span>
+        </div>
+        <p class="hint" style="margin-bottom: 10px;">
+            Pick a category and let AI suggest 5 ready-to-use action prompts for that niche.
+            Requires an active API key and model.
+        </p>
+
+        <div id="generatorNoKey" class="generator-no-key" style="display:none;">
+            ⚠️ Add and save an API key above to unlock AI action generation.
+        </div>
+
+        <div id="generatorCategories" class="category-grid">
+            <button class="category-chip" data-category="Email &amp; Communication">📧 Email</button>
+            <button class="category-chip" data-category="Writing &amp; Editing">✍️ Writing</button>
+            <button class="category-chip" data-category="Social Media">📱 Social Media</button>
+            <button class="category-chip" data-category="Business &amp; Productivity">📊 Business</button>
+            <button class="category-chip" data-category="Code &amp; Tech">💻 Code</button>
+            <button class="category-chip" data-category="Academic &amp; Research">🎓 Academic</button>
+            <button class="category-chip" data-category="Marketing &amp; Sales">🛍️ Marketing</button>
+            <button class="category-chip" data-category="HR &amp; Recruiting">👥 HR</button>
+            <button class="category-chip" data-category="Customer Service">🤝 Support</button>
+            <button class="category-chip" data-category="Legal &amp; Compliance">⚖️ Legal</button>
+        </div>
+
+        <div id="generatorLoading" class="generator-loading" style="display:none;">
+            <span class="generator-spinner"></span>
+            Generating suggestions for <strong id="generatingCategoryLabel"></strong>&hellip;
+        </div>
+
+        <div id="generatorResults" class="suggestions-grid" style="display:none;"></div>
+    </div>
+
+    <div style="margin-bottom: 14px;"></div>
 
     <div id="customActionsList" class="custom-actions-list">
         <div class="empty-state">No custom actions yet. Click the button below to add one.</div>
