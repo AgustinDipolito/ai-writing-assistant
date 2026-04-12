@@ -46,6 +46,9 @@ const {
   buildRuntimeConfig,
   geminiAdapter,
   openaiAdapter,
+  anthropicAdapter,
+  openrouterAdapter,
+  ollamaAdapter,
 } = require('../background.js');
 
 // ============================================================
@@ -607,6 +610,483 @@ test('geminiAdapter.listModels uses the correct API endpoint', async () => {
   assert.ok(capturedUrl.startsWith('https://generativelanguage.googleapis.com/'));
   assert.ok(capturedUrl.includes('/models'));
   assert.ok(capturedUrl.includes('my-api-key'));
+
+  delete global.fetch;
+});
+
+// ============================================================
+// anthropicAdapter._buildContent
+// ============================================================
+
+test('anthropicAdapter._buildContent with no imageData returns text-only content', () => {
+  const content = anthropicAdapter._buildContent('hello', null);
+  assert.equal(content.length, 1);
+  assert.equal(content[0].type, 'text');
+  assert.equal(content[0].text, 'hello');
+});
+
+test('anthropicAdapter._buildContent with base64 data URL prepends image block', () => {
+  const dataUrl = 'data:image/png;base64,iVBORw0K';
+  const content = anthropicAdapter._buildContent('describe this', dataUrl);
+  assert.equal(content.length, 2);
+  assert.equal(content[0].type, 'image');
+  assert.equal(content[0].source.type, 'base64');
+  assert.equal(content[0].source.media_type, 'image/png');
+  assert.equal(content[0].source.data, 'iVBORw0K');
+  assert.equal(content[1].type, 'text');
+  assert.equal(content[1].text, 'describe this');
+});
+
+test('anthropicAdapter._buildContent with external URL uses url source type', () => {
+  const url = 'https://example.com/photo.jpg';
+  const content = anthropicAdapter._buildContent('describe this', url);
+  assert.equal(content.length, 2);
+  assert.equal(content[0].type, 'image');
+  assert.equal(content[0].source.type, 'url');
+  assert.equal(content[0].source.url, url);
+});
+
+test('anthropicAdapter.call returns text from response', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      content: [{ type: 'text', text: 'Corrected text.' }],
+    }),
+  });
+
+  const result = await anthropicAdapter.call('Check grammar.', 'test-key', {});
+  assert.equal(result, 'Corrected text.');
+
+  delete global.fetch;
+});
+
+test('anthropicAdapter.call throws on API error response', async () => {
+  global.fetch = async () => ({
+    ok: false,
+    status: 401,
+    json: async () => ({ error: { message: 'Invalid API key.' } }),
+  });
+
+  await assert.rejects(
+    () => anthropicAdapter.call('Check grammar.', 'bad-key', {}),
+    (err) => {
+      assert.ok(err.message.includes('Invalid API key.'));
+      return true;
+    }
+  );
+
+  delete global.fetch;
+});
+
+test('anthropicAdapter.call throws when response has no text content', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({ content: [] }),
+  });
+
+  await assert.rejects(
+    () => anthropicAdapter.call('prompt', 'key', {}),
+    (err) => {
+      assert.ok(err.message.toLowerCase().includes('empty'));
+      return true;
+    }
+  );
+
+  delete global.fetch;
+});
+
+test('anthropicAdapter.call sends correct headers', async () => {
+  let capturedHeaders;
+  global.fetch = async (_url, opts) => {
+    capturedHeaders = opts.headers;
+    return {
+      ok: true,
+      json: async () => ({ content: [{ type: 'text', text: 'ok' }] }),
+    };
+  };
+
+  await anthropicAdapter.call('prompt', 'my-api-key', {});
+  assert.equal(capturedHeaders['x-api-key'], 'my-api-key');
+  assert.equal(capturedHeaders['anthropic-version'], '2023-06-01');
+
+  delete global.fetch;
+});
+
+test('anthropicAdapter.call includes systemInstruction as top-level system field', async () => {
+  let capturedBody;
+  global.fetch = async (_url, opts) => {
+    capturedBody = JSON.parse(opts.body);
+    return {
+      ok: true,
+      json: async () => ({ content: [{ type: 'text', text: 'ok' }] }),
+    };
+  };
+
+  await anthropicAdapter.call('prompt', 'key', { systemInstruction: 'Be concise.' });
+  assert.equal(capturedBody.system, 'Be concise.');
+
+  delete global.fetch;
+});
+
+test('anthropicAdapter.test returns response text', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      content: [{ type: 'text', text: 'Connection successful!' }],
+    }),
+  });
+
+  const result = await anthropicAdapter.test('test-key', 'claude-3-5-haiku-20241022');
+  assert.equal(result, 'Connection successful!');
+
+  delete global.fetch;
+});
+
+test('anthropicAdapter.test throws on non-ok response', async () => {
+  global.fetch = async () => ({
+    ok: false,
+    status: 403,
+    json: async () => ({ error: { message: 'Forbidden.' } }),
+  });
+
+  await assert.rejects(
+    () => anthropicAdapter.test('bad-key', 'claude-3-5-haiku-20241022'),
+    (err) => {
+      assert.ok(err.message.includes('Forbidden.'));
+      return true;
+    }
+  );
+
+  delete global.fetch;
+});
+
+// ============================================================
+// openrouterAdapter
+// ============================================================
+
+test('openrouterAdapter.call returns text from response', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{ message: { content: 'Style improved.' } }],
+    }),
+  });
+
+  const result = await openrouterAdapter.call('Improve style.', 'or-key', {});
+  assert.equal(result, 'Style improved.');
+
+  delete global.fetch;
+});
+
+test('openrouterAdapter.call sends correct Authorization header', async () => {
+  let capturedHeaders;
+  global.fetch = async (_url, opts) => {
+    capturedHeaders = opts.headers;
+    return {
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'ok' } }] }),
+    };
+  };
+
+  await openrouterAdapter.call('prompt', 'or-api-key', {});
+  assert.equal(capturedHeaders['Authorization'], 'Bearer or-api-key');
+  assert.ok(capturedHeaders['HTTP-Referer']);
+  assert.ok(capturedHeaders['X-Title']);
+
+  delete global.fetch;
+});
+
+test('openrouterAdapter.call throws on non-ok response', async () => {
+  global.fetch = async () => ({
+    ok: false,
+    status: 429,
+    json: async () => ({ error: { message: 'Rate limited.' } }),
+  });
+
+  await assert.rejects(
+    () => openrouterAdapter.call('prompt', 'key', {}),
+    (err) => {
+      assert.ok(err.message.includes('Rate limited.'));
+      return true;
+    }
+  );
+
+  delete global.fetch;
+});
+
+test('openrouterAdapter.call includes image in messages when imageData provided', async () => {
+  let capturedBody;
+  global.fetch = async (_url, opts) => {
+    capturedBody = JSON.parse(opts.body);
+    return {
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'ok' } }] }),
+    };
+  };
+
+  const imageData = 'data:image/png;base64,abc123';
+  await openrouterAdapter.call('describe', 'key', {}, imageData);
+  const userMsg = capturedBody.messages.find((m) => m.role === 'user');
+  assert.ok(Array.isArray(userMsg.content));
+  assert.equal(userMsg.content[0].type, 'image_url');
+  assert.equal(userMsg.content[0].image_url.url, imageData);
+
+  delete global.fetch;
+});
+
+test('openrouterAdapter.listModels returns formatted model list', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      data: [
+        { id: 'openai/gpt-4o', name: 'GPT-4o' },
+        { id: 'anthropic/claude-3-5-haiku', name: 'Claude 3.5 Haiku' },
+      ],
+    }),
+  });
+
+  const models = await openrouterAdapter.listModels('or-key');
+  assert.equal(models.length, 2);
+  assert.equal(models[0].value, 'openai/gpt-4o');
+  assert.equal(models[0].label, 'GPT-4o');
+  assert.equal(models[1].value, 'anthropic/claude-3-5-haiku');
+
+  delete global.fetch;
+});
+
+test('openrouterAdapter.listModels falls back to id when name is absent', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      data: [{ id: 'some/model-id' }],
+    }),
+  });
+
+  const models = await openrouterAdapter.listModels('or-key');
+  assert.equal(models[0].label, 'some/model-id');
+
+  delete global.fetch;
+});
+
+test('openrouterAdapter.listModels throws on non-ok response', async () => {
+  global.fetch = async () => ({
+    ok: false,
+    status: 401,
+    json: async () => ({ error: { message: 'Unauthorized.' } }),
+  });
+
+  await assert.rejects(
+    () => openrouterAdapter.listModels('bad-key'),
+    (err) => {
+      assert.ok(err.message.includes('Unauthorized.'));
+      return true;
+    }
+  );
+
+  delete global.fetch;
+});
+
+test('openrouterAdapter.test returns response text', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{ message: { content: 'Connection successful!' } }],
+    }),
+  });
+
+  const result = await openrouterAdapter.test('or-key', 'openai/gpt-4o-mini');
+  assert.equal(result, 'Connection successful!');
+
+  delete global.fetch;
+});
+
+// ============================================================
+// ollamaAdapter._getBaseUrl
+// ============================================================
+
+test('ollamaAdapter._getBaseUrl defaults to http://localhost:11434', () => {
+  assert.equal(ollamaAdapter._getBaseUrl({}), 'http://localhost:11434');
+  assert.equal(ollamaAdapter._getBaseUrl(), 'http://localhost:11434');
+});
+
+test('ollamaAdapter._getBaseUrl uses provided baseUrl and strips trailing slash', () => {
+  assert.equal(ollamaAdapter._getBaseUrl({ baseUrl: 'http://192.168.1.10:11434/' }), 'http://192.168.1.10:11434');
+  assert.equal(ollamaAdapter._getBaseUrl({ baseUrl: 'http://myhostname:11434' }), 'http://myhostname:11434');
+});
+
+// ============================================================
+// ollamaAdapter.call
+// ============================================================
+
+test('ollamaAdapter.call returns text from response', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{ message: { content: 'Hello from Ollama.' } }],
+    }),
+  });
+
+  const result = await ollamaAdapter.call('Say hello.', '', { model: 'llama3.2' });
+  assert.equal(result, 'Hello from Ollama.');
+
+  delete global.fetch;
+});
+
+test('ollamaAdapter.call uses custom baseUrl from config', async () => {
+  let capturedUrl;
+  global.fetch = async (url) => {
+    capturedUrl = url;
+    return {
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'ok' } }] }),
+    };
+  };
+
+  await ollamaAdapter.call('prompt', '', { baseUrl: 'http://remote-host:11434' });
+  assert.ok(capturedUrl.startsWith('http://remote-host:11434'));
+
+  delete global.fetch;
+});
+
+test('ollamaAdapter.call throws on non-ok response', async () => {
+  global.fetch = async () => ({
+    ok: false,
+    status: 500,
+    json: async () => ({ error: 'model not found' }),
+  });
+
+  await assert.rejects(
+    () => ollamaAdapter.call('prompt', '', {}),
+    (err) => {
+      assert.ok(err.message.includes('Ollama error') || err.message.includes('model not found'));
+      return true;
+    }
+  );
+
+  delete global.fetch;
+});
+
+test('ollamaAdapter.call sends no Authorization header (no API key needed)', async () => {
+  let capturedHeaders;
+  global.fetch = async (_url, opts) => {
+    capturedHeaders = opts.headers;
+    return {
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'ok' } }] }),
+    };
+  };
+
+  await ollamaAdapter.call('prompt', '', {});
+  assert.ok(!capturedHeaders['Authorization']);
+
+  delete global.fetch;
+});
+
+test('ollamaAdapter.requiresApiKey is false', () => {
+  assert.equal(ollamaAdapter.requiresApiKey, false);
+});
+
+// ============================================================
+// ollamaAdapter.test
+// ============================================================
+
+test('ollamaAdapter.test returns response text', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{ message: { content: 'Connection successful!' } }],
+    }),
+  });
+
+  const result = await ollamaAdapter.test('', 'llama3.2', { baseUrl: 'http://localhost:11434' });
+  assert.equal(result, 'Connection successful!');
+
+  delete global.fetch;
+});
+
+test('ollamaAdapter.test uses baseUrl from config', async () => {
+  let capturedUrl;
+  global.fetch = async (url) => {
+    capturedUrl = url;
+    return {
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'ok' } }] }),
+    };
+  };
+
+  await ollamaAdapter.test('', 'llama3.2', { baseUrl: 'http://myserver:11434' });
+  assert.ok(capturedUrl.startsWith('http://myserver:11434'));
+
+  delete global.fetch;
+});
+
+// ============================================================
+// ollamaAdapter.listModels
+// ============================================================
+
+test('ollamaAdapter.listModels returns installed models', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      models: [
+        { name: 'llama3.2' },
+        { name: 'mistral' },
+      ],
+    }),
+  });
+
+  const models = await ollamaAdapter.listModels('', {});
+  assert.equal(models.length, 2);
+  assert.equal(models[0].value, 'llama3.2');
+  assert.equal(models[0].label, 'llama3.2');
+  assert.equal(models[1].value, 'mistral');
+
+  delete global.fetch;
+});
+
+test('ollamaAdapter.listModels uses baseUrl from config', async () => {
+  let capturedUrl;
+  global.fetch = async (url) => {
+    capturedUrl = url;
+    return {
+      ok: true,
+      json: async () => ({ models: [] }),
+    };
+  };
+
+  await ollamaAdapter.listModels('', { baseUrl: 'http://remote:11434' });
+  assert.ok(capturedUrl.startsWith('http://remote:11434'));
+  assert.ok(capturedUrl.includes('/api/tags'));
+
+  delete global.fetch;
+});
+
+test('ollamaAdapter.listModels throws on non-ok response', async () => {
+  global.fetch = async () => ({
+    ok: false,
+    status: 404,
+    text: async () => '',
+  });
+
+  await assert.rejects(
+    () => ollamaAdapter.listModels('', {}),
+    (err) => {
+      assert.ok(err.message.includes('Ollama error'));
+      return true;
+    }
+  );
+
+  delete global.fetch;
+});
+
+test('ollamaAdapter.listModels returns empty array when models is empty', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({ models: [] }),
+  });
+
+  const models = await ollamaAdapter.listModels('', {});
+  assert.equal(models.length, 0);
 
   delete global.fetch;
 });

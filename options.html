@@ -611,6 +611,9 @@
         <select id="providerSelect">
             <option value="gemini">Google Gemini</option>
             <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic Claude</option>
+            <option value="openrouter">OpenRouter (100+ models)</option>
+            <option value="ollama">Ollama (local / self-hosted)</option>
         </select>
     </div>
 
@@ -655,6 +658,64 @@
                 Get your key at
                 <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">OpenAI Platform</a>.
                 Stored locally, never shared.
+            </p>
+        </div>
+    </div>
+
+    <!-- Anthropic key panel -->
+    <div id="panel-anthropic" class="provider-panel" style="display:none">
+        <div class="form-group">
+            <label for="apiKey-anthropic">Anthropic API Key</label>
+            <div class="input-wrapper">
+                <input type="password" id="apiKey-anthropic" placeholder="sk-ant-…" autocomplete="off" spellcheck="false">
+                <button class="toggle-visibility" data-target="apiKey-anthropic" type="button" title="Show/hide key">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                    </svg>
+                </button>
+            </div>
+            <p class="hint">
+                Get your key at
+                <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">Anthropic Console</a>.
+                Stored locally, never shared.
+            </p>
+        </div>
+    </div>
+
+    <!-- OpenRouter key panel -->
+    <div id="panel-openrouter" class="provider-panel" style="display:none">
+        <div class="form-group">
+            <label for="apiKey-openrouter">OpenRouter API Key</label>
+            <div class="input-wrapper">
+                <input type="password" id="apiKey-openrouter" placeholder="sk-or-…" autocomplete="off" spellcheck="false">
+                <button class="toggle-visibility" data-target="apiKey-openrouter" type="button" title="Show/hide key">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                        <circle cx="12" cy="12" r="3" />
+                    </svg>
+                </button>
+            </div>
+            <p class="hint">
+                Get your free key at
+                <a href="https://openrouter.ai/keys" target="_blank" rel="noopener">OpenRouter</a>.
+                Gives access to 100+ models. Click <strong>Refresh Models</strong> to fetch the full list.
+                Stored locally, never shared.
+            </p>
+        </div>
+    </div>
+
+    <!-- Ollama panel (no API key — local server) -->
+    <div id="panel-ollama" class="provider-panel" style="display:none">
+        <div class="form-group">
+            <label for="baseUrl-ollama">Ollama Base URL</label>
+            <input type="text" id="baseUrl-ollama" placeholder="http://localhost:11434" autocomplete="off" spellcheck="false">
+            <p class="hint">
+                URL of your local Ollama server. No API key required.
+                Install models with <code>ollama pull &lt;model&gt;</code>, then click <strong>Refresh Models</strong>.
+                See <a href="https://ollama.com/library" target="_blank" rel="noopener">Ollama library</a>.
             </p>
         </div>
     </div>
@@ -898,7 +959,7 @@
     <div class="footer">
         Select text on any webpage to get AI-powered writing suggestions.<br>
         Provider: <span id="footerProvider">Gemini</span> &middot; Model: <span id="footerModel">gemini-2.0-flash</span>
-        &middot; v1.1.0
+        &middot; v1.2.0
     </div>
 
     <script src="options.js"></script>

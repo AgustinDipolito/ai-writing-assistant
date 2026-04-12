@@ -469,9 +469,382 @@ const openaiAdapter = {
   },
 };
 
+// ============================================================
+// Anthropic Claude Adapter
+// ============================================================
+
+const anthropicAdapter = {
+  defaultModel: 'claude-3-5-haiku-20241022',
+  models: [
+    { value: 'claude-opus-4-5',           label: 'Claude Opus 4.5 (most capable)' },
+    { value: 'claude-sonnet-4-5',         label: 'Claude Sonnet 4.5 (balanced)' },
+    { value: 'claude-3-5-haiku-20241022', label: 'Claude 3.5 Haiku (fastest)' },
+    { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
+  ],
+
+  _buildContent(prompt, imageData) {
+    if (!imageData) return [{ type: 'text', text: prompt }];
+
+    if (imageData.startsWith('data:')) {
+      const commaIdx = imageData.indexOf(',');
+      const header   = commaIdx > -1 ? imageData.slice(0, commaIdx) : '';
+      const base64   = commaIdx > -1 ? imageData.slice(commaIdx + 1) : imageData;
+      const mediaType = header.match(/data:([^;]+)/)?.[1] || 'image/jpeg';
+      return [
+        { type: 'image', source: { type: 'base64', media_type: mediaType, data: base64 } },
+        { type: 'text', text: prompt },
+      ];
+    }
+
+    // External URL — use url source type
+    return [
+      { type: 'image', source: { type: 'url', url: imageData } },
+      { type: 'text', text: prompt },
+    ];
+  },
+
+  _buildBody(prompt, config, imageData, stream = false) {
+    const body = {
+      model: config.model || this.defaultModel,
+      max_tokens: config.maxTokens || 1500,
+      messages: [{ role: 'user', content: this._buildContent(prompt, imageData) }],
+    };
+    if (config.systemInstruction) body.system = config.systemInstruction;
+    if (config.temperature != null) body.temperature = config.temperature;
+    if (stream) body.stream = true;
+    return body;
+  },
+
+  _headers(apiKey) {
+    return {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    };
+  },
+
+  async call(prompt, apiKey, config = {}, imageData = null) {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: this._headers(apiKey),
+      body: JSON.stringify(this._buildBody(prompt, config, imageData)),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Anthropic API error (HTTP ${response.status})`);
+    }
+
+    const data = await response.json();
+    const result = data.content?.find((b) => b.type === 'text')?.text;
+    if (!result) throw new Error('Anthropic returned an empty response. Please try again.');
+    return result;
+  },
+
+  async stream(prompt, apiKey, config = {}, onDelta, signal, imageData = null) {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: this._headers(apiKey),
+      body: JSON.stringify(this._buildBody(prompt, config, imageData, true)),
+      signal,
+    });
+
+    return processSSEStream(
+      response,
+      (data) => {
+        if (data?.type === 'content_block_delta' && data?.delta?.type === 'text_delta') {
+          return data.delta.text || '';
+        }
+        return '';
+      },
+      onDelta,
+      signal
+    );
+  },
+
+  async test(apiKey, model) {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: this._headers(apiKey),
+      body: JSON.stringify({
+        model: model || this.defaultModel,
+        max_tokens: 20,
+        messages: [{ role: 'user', content: 'Say "Connection successful!" in exactly those words.' }],
+      }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || `HTTP ${response.status}`);
+    }
+    const data = await response.json();
+    return data.content?.find((b) => b.type === 'text')?.text || '';
+  },
+};
+
+// ============================================================
+// OpenRouter Adapter (meta-adapter for 100+ models)
+// ============================================================
+
+const openrouterAdapter = {
+  defaultModel: 'openai/gpt-4o-mini',
+  models: [
+    { value: 'openai/gpt-4o-mini',                   label: 'GPT-4o Mini (OpenAI)' },
+    { value: 'openai/gpt-4o',                        label: 'GPT-4o (OpenAI)' },
+    { value: 'anthropic/claude-3-5-haiku',           label: 'Claude 3.5 Haiku (Anthropic)' },
+    { value: 'anthropic/claude-3-5-sonnet',          label: 'Claude 3.5 Sonnet (Anthropic)' },
+    { value: 'google/gemini-2.0-flash-001',          label: 'Gemini 2.0 Flash (Google)' },
+    { value: 'meta-llama/llama-3.3-70b-instruct',   label: 'Llama 3.3 70B (Meta)' },
+    { value: 'mistralai/mistral-small-3.1-24b-instruct', label: 'Mistral Small (Mistral AI)' },
+    { value: 'deepseek/deepseek-chat-v3-0324',       label: 'DeepSeek Chat (DeepSeek)' },
+  ],
+
+  _headers(apiKey) {
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+      'HTTP-Referer': 'https://github.com/AgustinDipolito/ai-writing-assistant',
+      'X-Title': 'AI Writing Assistant',
+    };
+  },
+
+  _buildMessages(prompt, config, imageData) {
+    const messages = [];
+    if (config.systemInstruction) {
+      messages.push({ role: 'system', content: config.systemInstruction });
+    }
+    if (imageData) {
+      messages.push({
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url: imageData } },
+          { type: 'text', text: prompt },
+        ],
+      });
+    } else {
+      messages.push({ role: 'user', content: prompt });
+    }
+    return messages;
+  },
+
+  async call(prompt, apiKey, config = {}, imageData = null) {
+    const body = {
+      model: config.model || this.defaultModel,
+      messages: this._buildMessages(prompt, config, imageData),
+      temperature: config.temperature ?? 0.4,
+      max_tokens: config.maxTokens || 1500,
+    };
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: this._headers(apiKey),
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || `OpenRouter API error (HTTP ${response.status})`);
+    }
+
+    const data = await response.json();
+    const result = data.choices?.[0]?.message?.content;
+    if (!result) throw new Error('OpenRouter returned an empty response. Please try again.');
+    return result;
+  },
+
+  async stream(prompt, apiKey, config = {}, onDelta, signal, imageData = null) {
+    const body = {
+      model: config.model || this.defaultModel,
+      messages: this._buildMessages(prompt, config, imageData),
+      temperature: config.temperature ?? 0.4,
+      max_tokens: config.maxTokens || 1500,
+      stream: true,
+    };
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: this._headers(apiKey),
+      body: JSON.stringify(body),
+      signal,
+    });
+
+    return processSSEStream(
+      response,
+      (data) => data?.choices?.[0]?.delta?.content || '',
+      onDelta,
+      signal
+    );
+  },
+
+  async test(apiKey, model) {
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: this._headers(apiKey),
+      body: JSON.stringify({
+        model: model || this.defaultModel,
+        messages: [{ role: 'user', content: 'Say "Connection successful!" in exactly those words.' }],
+        max_tokens: 20,
+      }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || `HTTP ${response.status}`);
+    }
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || '';
+  },
+
+  async listModels(apiKey) {
+    const response = await fetch('https://openrouter.ai/api/v1/models', {
+      headers: { 'Authorization': `Bearer ${apiKey}` },
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || `OpenRouter API error (HTTP ${response.status})`);
+    }
+    const data = await response.json();
+    return (data.data || []).map((m) => ({
+      value: m.id,
+      label: m.name || m.id,
+    }));
+  },
+};
+
+// ============================================================
+// Ollama Adapter (local / self-hosted)
+// ============================================================
+
+const ollamaAdapter = {
+  requiresApiKey: false,
+  defaultModel: 'llama3.2',
+  models: [
+    { value: 'llama3.2',   label: 'Llama 3.2 (recommended)' },
+    { value: 'llama3.1',   label: 'Llama 3.1' },
+    { value: 'mistral',    label: 'Mistral' },
+    { value: 'phi4',       label: 'Phi-4' },
+    { value: 'gemma3',     label: 'Gemma 3' },
+    { value: 'qwen2.5',    label: 'Qwen 2.5' },
+    { value: 'llava',      label: 'LLaVA (vision)' },
+  ],
+
+  _getBaseUrl(config = {}) {
+    return (config.baseUrl || 'http://localhost:11434').replace(/\/$/, '');
+  },
+
+  _buildMessages(prompt, config, imageData) {
+    const messages = [];
+    if (config.systemInstruction) {
+      messages.push({ role: 'system', content: config.systemInstruction });
+    }
+    if (imageData) {
+      // Ollama /v1/chat/completions supports OpenAI-style image_url content
+      messages.push({
+        role: 'user',
+        content: [
+          { type: 'image_url', image_url: { url: imageData } },
+          { type: 'text', text: prompt },
+        ],
+      });
+    } else {
+      messages.push({ role: 'user', content: prompt });
+    }
+    return messages;
+  },
+
+  async call(prompt, apiKey, config = {}, imageData = null) {
+    const baseUrl = this._getBaseUrl(config);
+    const body = {
+      model: config.model || this.defaultModel,
+      messages: this._buildMessages(prompt, config, imageData),
+      stream: false,
+      options: {
+        temperature: config.temperature ?? 0.4,
+        num_predict: config.maxTokens || 1500,
+      },
+    };
+
+    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || err.error || `Ollama error (HTTP ${response.status}). Is Ollama running?`);
+    }
+
+    const data = await response.json();
+    const result = data.choices?.[0]?.message?.content;
+    if (!result) throw new Error('Ollama returned an empty response. Please try again.');
+    return result;
+  },
+
+  async stream(prompt, apiKey, config = {}, onDelta, signal, imageData = null) {
+    const baseUrl = this._getBaseUrl(config);
+    const body = {
+      model: config.model || this.defaultModel,
+      messages: this._buildMessages(prompt, config, imageData),
+      stream: true,
+      options: {
+        temperature: config.temperature ?? 0.4,
+        num_predict: config.maxTokens || 1500,
+      },
+    };
+
+    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal,
+    });
+
+    return processSSEStream(
+      response,
+      (data) => data?.choices?.[0]?.delta?.content || '',
+      onDelta,
+      signal
+    );
+  },
+
+  async test(apiKey, model, config = {}) {
+    const baseUrl = this._getBaseUrl(config);
+    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: model || this.defaultModel,
+        messages: [{ role: 'user', content: 'Say "Connection successful!" in exactly those words.' }],
+        stream: false,
+      }),
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || err.error || `HTTP ${response.status}. Is Ollama running?`);
+    }
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || '';
+  },
+
+  async listModels(apiKey, config = {}) {
+    const baseUrl = this._getBaseUrl(config);
+    const response = await fetch(`${baseUrl}/api/tags`);
+    if (!response.ok) {
+      throw new Error(`Ollama error (HTTP ${response.status}). Is Ollama running at ${baseUrl}?`);
+    }
+    const data = await response.json();
+    return (data.models || []).map((m) => ({
+      value: m.name,
+      label: m.name,
+    }));
+  },
+};
+
 const PROVIDERS = {
   gemini: geminiAdapter,
   openai: openaiAdapter,
+  anthropic: anthropicAdapter,
+  openrouter: openrouterAdapter,
+  ollama: ollamaAdapter,
 };
 
 async function processSSEStream(response, extractDelta, onDelta, signal) {
@@ -558,9 +931,9 @@ async function resolveActiveConfig() {
     const providerCfg = pc[providerId] || {};
     const apiKey = providerCfg.apiKey || '';
 
-    if (!apiKey) {
+    if (!apiKey && adapter.requiresApiKey !== false) {
       throw new Error(
-        `No API key configured for ${providerId === 'gemini' ? 'Gemini' : 'OpenAI'}. Open Options to add your key.`
+        `No API key configured for "${providerId}". Open Options to add your key.`
       );
     }
 
@@ -825,7 +1198,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message.type === 'TEST_CONNECTION') {
-    const { providerId, apiKey, model } = message;
+    const { providerId, apiKey, model, config } = message;
     const adapter = PROVIDERS[providerId];
 
     if (!adapter) {
@@ -835,7 +1208,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     (async () => {
       try {
-        const reply = await adapter.test(apiKey, model);
+        const reply = await adapter.test(apiKey, model, config || {});
         sendResponse({ result: reply });
       } catch (err) {
         sendResponse({ error: err.message || 'Connection test failed.' });
@@ -846,7 +1219,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message.type === 'LIST_MODELS') {
-    const { providerId, apiKey } = message;
+    const { providerId, apiKey, config } = message;
     const adapter = PROVIDERS[providerId];
 
     if (!adapter) {
@@ -861,7 +1234,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
     (async () => {
       try {
-        const models = await adapter.listModels(apiKey);
+        const models = await adapter.listModels(apiKey, config || {});
         sendResponse({ models });
       } catch (err) {
         sendResponse({ error: err.message || 'Failed to list models.' });
@@ -1013,6 +1386,9 @@ if (typeof module !== 'undefined' && module.exports) {
     buildRuntimeConfig,
     geminiAdapter,
     openaiAdapter,
+    anthropicAdapter,
+    openrouterAdapter,
+    ollamaAdapter,
   };
 }
 
