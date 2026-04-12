@@ -580,7 +580,10 @@ function renderActionCards() {
           </div>
         </div>
         <div>
-          <label>Prompt Template</label>
+          <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+            <label style="margin-bottom:0;">Prompt Template</label>
+            <button type="button" class="btn-enhance-prompt" data-index="${index}" title="Use AI to improve this prompt based on the action name and current description">✨ Enhance Prompt</button>
+          </div>
           <textarea class="action-prompt" placeholder="Write your prompt here. Use {{TEXT}} for the selected text." data-index="${index}">${escapeHtml(action.prompt)}</textarea>
         </div>
         <div>
@@ -666,6 +669,32 @@ customActionsList.addEventListener('click', (e) => {
     syncCardsToData();
     customActions[parseInt(iconBtn.dataset.index, 10)].icon = iconBtn.dataset.icon;
     renderActionCards();
+    return;
+  }
+  const enhanceBtn = e.target.closest('.btn-enhance-prompt');
+  if (enhanceBtn) {
+    const index = parseInt(enhanceBtn.dataset.index, 10);
+    const card = customActionsList.querySelector(`.custom-action-card[data-index="${index}"]`);
+    if (!card) return;
+    const nameInput = card.querySelector('.action-name');
+    const promptTextarea = card.querySelector('.action-prompt');
+    const actionName = nameInput?.value.trim() || '';
+    const currentPrompt = promptTextarea?.value.trim() || '';
+    enhanceBtn.disabled = true;
+    enhanceBtn.textContent = '⏳ Enhancing…';
+    chrome.runtime.sendMessage(
+      { type: 'ENHANCE_PROMPT', actionName, currentPrompt },
+      (response) => {
+        enhanceBtn.disabled = false;
+        enhanceBtn.textContent = '✨ Enhance Prompt';
+        if (response?.error) {
+          showStatus('error', `Enhance failed: ${response.error}`, customActionsStatusEl);
+        } else if (response?.result) {
+          promptTextarea.value = response.result.trim();
+          showStatus('success', 'Prompt enhanced!', customActionsStatusEl);
+        }
+      }
+    );
   }
 });
 
