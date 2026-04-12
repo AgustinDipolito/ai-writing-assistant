@@ -1,6 +1,6 @@
 # AI Writing Assistant
 
-A Chrome extension that surfaces an AI-powered action menu over any selected text on any web page. Supports Google Gemini and OpenAI as interchangeable providers.
+A Chrome extension that brings LLMs and AI agents to every web page. Select text, right-click, or open the sidebar — get instant access to any model from any provider, anywhere you browse. Supports Google Gemini and OpenAI today, with a plugin-ready architecture for any provider.
 
 ---
 
@@ -9,6 +9,8 @@ A Chrome extension that surfaces an AI-powered action menu over any selected tex
 Select text anywhere in Chrome. A small floating menu appears. Choose an action — grammar check, style improvement, synonym lookup, or any custom action you have defined. The result streams into a panel in real time. Copy it, apply it directly to the original field, or dismiss and keep browsing.
 
 No backend, no data collection. Every API call goes directly from your browser to the provider you choose.
+
+**Vision**: become the universal access layer between users and LLMs across the entire web — provider-agnostic, page-aware, and extensible enough to support autonomous agent workflows.
 
 ---
 
@@ -234,12 +236,34 @@ Tests use Node's built-in test runner. The test suite covers the shared selectio
 
 ## Roadmap
 
-Planned improvements not yet implemented:
+The roadmap is organized around a single goal: **make LLMs and AI agents accessible on every web page**, regardless of provider, model, or workflow.
 
-- **Session history** - in-panel drawer to revisit recent results within a browser session.
-- **Keyboard shortcuts** - trigger actions without selecting from a menu.
-- **Export / Import** - serialize and restore configuration as a JSON file.
-- **Drag-to-reorder custom actions** - reorder the custom action list via drag and drop in Options.
+### Tier 1 — Universal LLM Access
+
+| Feature | Description |
+|---|---|
+| **Multi-provider router** | Add Anthropic Claude, OpenRouter (meta-adapter for 100+ models), and Ollama for local/self-hosted models. One extension, any LLM. |
+| **Sidebar chat** | Persistent side panel for freeform conversation with any model while browsing. Page content is available as context automatically. |
+| **Page-aware context** | Inject the visible page (or a selection of it) into every prompt so the LLM understands what the user is looking at — summaries, Q&A, and data extraction become one-click actions. |
+
+### Tier 2 — Agentic Workflows
+
+| Feature | Description |
+|---|---|
+| **Agent mode** | Define multi-step workflows (chains) that run sequentially or branch on LLM output. Example: _"Extract emails → draft a reply for each → copy to clipboard."_ |
+| **Web actions library** | Prebuilt page-level actions: _Summarize page_, _Extract structured data_, _Translate_, _Explain like I'm five_, _Compare with clipboard_. |
+| **Cross-tab context** | Let agents pull context from multiple open tabs so workflows can span sites (e.g., compare two product pages). |
+| **Model Context Protocol (MCP) integration** | Connect to external tools and data sources via MCP, turning the browser into a full agent runtime. |
+
+### Tier 3 — Platform & Ecosystem
+
+| Feature | Description |
+|---|---|
+| **Action marketplace** | Publish, share, and install community-created actions and agent workflows from a public directory. |
+| **Developer SDK** | JavaScript API that lets any web page interact with the extension's LLM layer — sites can offer "Ask AI" features without shipping their own integration. |
+| **Session history** | In-panel drawer to revisit recent results and conversations within a browser session. |
+| **Export / Import** | Serialize and restore the full configuration (actions, workflows, preferences) as a portable JSON file. |
+| **Keyboard-first UX** | Full keyboard navigation and customizable shortcuts for every action to support power users. |
 
 ---
 
