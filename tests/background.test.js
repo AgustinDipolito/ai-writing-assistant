@@ -38,6 +38,7 @@ const {
   BASE_ACTIONS,
   buildPrompt,
   buildCustomPrompt,
+  buildEnhancePrompt,
   coerceTemperature,
   coerceMaxTokens,
   normalizeActionOverride,
@@ -146,8 +147,48 @@ test('buildCustomPrompt includes language instruction', () => {
 });
 
 // ============================================================
-// coerceTemperature
+// buildEnhancePrompt
 // ============================================================
+
+test('buildEnhancePrompt includes action name in prompt', () => {
+  const prompt = buildEnhancePrompt('Summarize', '');
+  assert.ok(prompt.includes('Summarize'));
+});
+
+test('buildEnhancePrompt includes current prompt when provided', () => {
+  const prompt = buildEnhancePrompt('Translate', 'Translate the text to French.');
+  assert.ok(prompt.includes('Translate the text to French.'));
+});
+
+test('buildEnhancePrompt works with empty action name and empty current prompt', () => {
+  const prompt = buildEnhancePrompt('', '');
+  assert.equal(typeof prompt, 'string');
+  assert.ok(prompt.length > 0);
+  assert.ok(prompt.includes('{{TEXT}}'));
+});
+
+test('buildEnhancePrompt instructs to include {{TEXT}} placeholder', () => {
+  const prompt = buildEnhancePrompt('Simplify', '');
+  assert.ok(prompt.includes('{{TEXT}}'));
+});
+
+test('buildEnhancePrompt returns a string', () => {
+  const prompt = buildEnhancePrompt('My Action', 'Some prompt');
+  assert.equal(typeof prompt, 'string');
+});
+
+test('buildEnhancePrompt omits current prompt section when not provided', () => {
+  const prompt = buildEnhancePrompt('Translate', '');
+  assert.ok(!prompt.includes('Current Prompt'));
+});
+
+test('buildEnhancePrompt omits action name section when not provided', () => {
+  const prompt = buildEnhancePrompt('', 'Existing prompt');
+  assert.ok(!prompt.includes('Action Name'));
+  assert.ok(prompt.includes('Existing prompt'));
+});
+
+
 
 test('coerceTemperature clamps values to [0, 1]', () => {
   assert.equal(coerceTemperature(0), 0);

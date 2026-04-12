@@ -146,6 +146,21 @@ function buildCustomPrompt(promptTemplate, text, config) {
   return `${langInstruction}\n\n${prompt}`;
 }
 
+function buildEnhancePrompt(actionName, currentPrompt) {
+  const namePart = actionName ? `Action Name: "${actionName}"\n` : '';
+  const currentPart = currentPrompt ? `Current Prompt: "${currentPrompt}"\n` : '';
+  return `You are an expert prompt engineer for AI writing assistants. A user wants to create a custom AI action with the following details:
+
+${namePart}${currentPart}
+Your task is to write an enhanced, detailed prompt template for this action that:
+1. Clearly defines the AI's role and expertise relevant to the action goal
+2. Provides specific, step-by-step instructions for processing the selected text
+3. Specifies the desired output format and style
+4. Uses {{TEXT}} as the placeholder for the selected text
+
+Return ONLY the prompt template text, with no introduction, explanation, or commentary. The template must include {{TEXT}} at least once.`;
+}
+
 function supportsGeneration(model) {
   return Array.isArray(model.supportedGenerationMethods) && model.supportedGenerationMethods.includes('generateContent');
 }
@@ -856,6 +871,23 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'ENHANCE_PROMPT') {
+    const { actionName, currentPrompt } = message;
+
+    (async () => {
+      try {
+        const { adapter, apiKey, config } = await resolveActiveConfig();
+        const prompt = buildEnhancePrompt(actionName || '', currentPrompt || '');
+        const result = await adapter.call(prompt, apiKey, config);
+        sendResponse({ result });
+      } catch (err) {
+        sendResponse({ error: err.message || 'Failed to enhance prompt.' });
+      }
+    })();
+
+    return true;
+  }
+
   if (message.type !== 'AI_REQUEST') return false;
 
   const { action, text } = message;
@@ -973,6 +1005,7 @@ if (typeof module !== 'undefined' && module.exports) {
     BASE_ACTIONS,
     buildPrompt,
     buildCustomPrompt,
+    buildEnhancePrompt,
     coerceTemperature,
     coerceMaxTokens,
     normalizeActionOverride,
