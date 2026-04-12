@@ -264,10 +264,11 @@ refreshModelsBtn.addEventListener('click', async () => {
         modelSelect.innerHTML = models
           .map((m) => `<option value="${m.value}"${m.value === currentValue ? ' selected' : ''}>${m.label}</option>`)
           .join('');
+        const countLabel = `${models.length} model${models.length !== 1 ? 's' : ''}`;
         if (modelsHint) {
-          modelsHint.textContent = `${models.length} model${models.length !== 1 ? 's' : ''} available.`;
+          modelsHint.textContent = `${countLabel} available.`;
         }
-        showStatus('success', `Loaded ${models.length} model${models.length !== 1 ? 's' : ''}.`);
+        showStatus('success', `Loaded ${countLabel}.`);
         autoSaveConfig();
       }
     }

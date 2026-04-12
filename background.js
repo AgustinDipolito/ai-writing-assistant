@@ -292,8 +292,10 @@ const geminiAdapter = {
       throw new Error(err.error?.message || `Gemini API error (HTTP ${response.status})`);
     }
     const data = await response.json();
+    const supportsGeneration = (m) =>
+      Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent');
     return (data.models || [])
-      .filter((m) => Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent'))
+      .filter(supportsGeneration)
       .map((m) => ({
         value: m.name.replace(/^models\//, ''),
         label: m.displayName || m.name.replace(/^models\//, ''),

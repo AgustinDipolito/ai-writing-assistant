@@ -563,8 +563,8 @@ test('geminiAdapter.listModels uses the correct API endpoint', async () => {
   };
 
   await geminiAdapter.listModels('my-api-key');
-  assert.ok(capturedUrl.includes('generativelanguage.googleapis.com'));
-  assert.ok(capturedUrl.includes('models'));
+  assert.ok(capturedUrl.startsWith('https://generativelanguage.googleapis.com/'));
+  assert.ok(capturedUrl.includes('/models'));
   assert.ok(capturedUrl.includes('my-api-key'));
 
   delete global.fetch;
