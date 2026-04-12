@@ -261,9 +261,14 @@ refreshModelsBtn.addEventListener('click', async () => {
         showStatus('error', 'No supported models found for this API key.');
       } else {
         const currentValue = modelSelect.value;
-        modelSelect.innerHTML = models
-          .map((m) => `<option value="${m.value}"${m.value === currentValue ? ' selected' : ''}>${m.label}</option>`)
-          .join('');
+        modelSelect.innerHTML = '';
+        models.forEach((m) => {
+          const opt = document.createElement('option');
+          opt.value = m.value;
+          opt.textContent = m.label;
+          opt.selected = m.value === currentValue;
+          modelSelect.appendChild(opt);
+        });
         const countLabel = `${models.length} model${models.length !== 1 ? 's' : ''}`;
         if (modelsHint) {
           modelsHint.textContent = `${countLabel} available.`;

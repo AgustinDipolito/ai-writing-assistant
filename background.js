@@ -146,6 +146,10 @@ function buildCustomPrompt(promptTemplate, text, config) {
   return `${langInstruction}\n\n${prompt}`;
 }
 
+function supportsGeneration(model) {
+  return Array.isArray(model.supportedGenerationMethods) && model.supportedGenerationMethods.includes('generateContent');
+}
+
 const geminiAdapter = {
   defaultModel: 'gemini-2.0-flash',
   imageGenerationModel: 'gemini-2.0-flash-preview-image-generation',
@@ -292,8 +296,6 @@ const geminiAdapter = {
       throw new Error(err.error?.message || `Gemini API error (HTTP ${response.status})`);
     }
     const data = await response.json();
-    const supportsGeneration = (m) =>
-      Array.isArray(m.supportedGenerationMethods) && m.supportedGenerationMethods.includes('generateContent');
     return (data.models || [])
       .filter(supportsGeneration)
       .map((m) => ({
