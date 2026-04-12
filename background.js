@@ -1326,10 +1326,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 async function getContextActions() {
   const storage = await chrome.storage.local.get('customActions');
   const customActions = (storage.customActions || [])
-    .filter((a) => a?.id && a?.name && a?.prompt)
+    .filter((a) => a?.id && a?.name && a?.prompt && !a?.hidden)
     .map((a) => ({ id: a.id, label: `${a.icon || '✏️'} ${a.name}` }));
 
-  return [...BASE_ACTIONS, ...customActions];
+  return customActions;
 }
 
 async function rebuildContextMenus() {
