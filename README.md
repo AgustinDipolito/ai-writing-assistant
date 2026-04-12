@@ -1,6 +1,6 @@
 # AI Writing Assistant
 
-A Chrome extension that brings LLMs and AI agents to every web page. Select text, right-click, or open the sidebar — get instant access to any model from any provider, anywhere you browse. Supports Google Gemini and OpenAI today, with a plugin-ready architecture for any provider.
+A Chrome extension that brings AI writing help to every web page. Select text or use the right-click context menu to send it to Gemini or OpenAI and view the response in an in-page results panel. The extension is built with an adapter-based architecture that can be extended to support more providers over time.
 
 ---
 
