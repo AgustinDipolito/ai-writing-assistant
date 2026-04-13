@@ -428,10 +428,8 @@ document.querySelectorAll('textarea.collapsible').forEach((ta) => {
 });
 
 function expandCollapsibleIfFilled() {
-  [systemInstruction].forEach((ta) => {
-    if (ta.value.trim()) ta.classList.add('expanded');
-    else ta.classList.remove('expanded');
-  });
+  if (systemInstruction.value.trim()) systemInstruction.classList.add('expanded');
+  else systemInstruction.classList.remove('expanded');
 }
 
 // ============================================================
