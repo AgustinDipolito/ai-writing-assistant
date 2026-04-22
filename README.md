@@ -24,7 +24,7 @@ No backend, no data collection. Every API call goes directly from your browser t
 - Light and dark themes follow the system `prefers-color-scheme`.
 - All configuration stored locally with `chrome.storage.local`.
 
-### Built-in actions
+### Examples Built-in actions
 
 | Action   | What it does                                                        |
 |----------|---------------------------------------------------------------------|
