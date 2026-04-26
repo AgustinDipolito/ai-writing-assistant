@@ -253,7 +253,7 @@
     setTimeout(() => copyToast.classList.remove('show'), 1500);
   }
 
-  function getContextButtonCount() {
+  function getContextButtonCountLabel() {
     if (!selectionContextEntries.length) return '';
     return selectionContextEntries.length > MAX_CONTEXT_BADGE_COUNT ? '9+' : String(selectionContextEntries.length);
   }
@@ -441,7 +441,7 @@
       if (visibleCustomActions.length > 0) {
         menu.classList.remove('ai-menu--setup');
         const contextButtonTitle = getContextButtonTitle();
-        const contextButton = `<button class="ai-menu-context-btn" data-role="add-context" title="${escapeAttr(contextButtonTitle)}" aria-label="${escapeAttr(contextButtonTitle)}" data-count="${escapeAttr(getContextButtonCount())}">${ICONS.add_context}</button>`;
+        const contextButton = `<button class="ai-menu-context-btn" data-role="add-context" title="${escapeAttr(contextButtonTitle)}" aria-label="${escapeAttr(contextButtonTitle)}" data-count="${escapeAttr(getContextButtonCountLabel())}">${ICONS.add_context}</button>`;
         const actionButtons = visibleCustomActions.map((ca) =>
           `<button class="ai-menu-btn" data-action="${ca.id}"><span class="icon" style="font-style:normal;">${ca.icon || '✏️'}</span>${escapeHtml(ca.name)}</button>`
         ).join('<div class="ai-menu-separator"></div>');
