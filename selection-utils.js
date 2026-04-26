@@ -95,9 +95,9 @@
       .filter(Boolean);
   }
 
-  function appendSelectionContext(entries, nextText, maxLength = Number.MAX_SAFE_INTEGER) {
+  function appendSelectionContext(entries, nextText, maxEntryLength = Number.MAX_SAFE_INTEGER) {
     const normalizedEntries = normalizeSelectionContextEntries(entries);
-    const normalizedText = clampText(nextText, maxLength);
+    const normalizedText = clampText(nextText, maxEntryLength);
     if (!normalizedText) return normalizedEntries;
     return [...normalizedEntries, normalizedText];
   }

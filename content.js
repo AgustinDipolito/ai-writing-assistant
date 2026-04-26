@@ -206,6 +206,13 @@
     return Boolean(node.closest('[contenteditable]:not([contenteditable="false"])'));
   }
 
+  function isTextInputElement(node) {
+    if (!(node instanceof Element)) return false;
+    const tagName = node.tagName.toUpperCase();
+    return tagName === 'TEXTAREA'
+      || (tagName === 'INPUT' && /^(text|search|url|tel|email|password)$/i.test(node.getAttribute('type') || node.type || 'text'));
+  }
+
   function normalizeSelectionSnapshot(snapshot) {
     if (!snapshot || !snapshot.source) return null;
     return snapshot;
@@ -272,11 +279,8 @@
 
   function clearCurrentTextSelection() {
     const activeElement = document.activeElement;
-    const tagName = String(activeElement?.tagName || '').toUpperCase();
-    const isTextInput = tagName === 'TEXTAREA'
-      || (tagName === 'INPUT' && /^(text|search|url|tel|email|password)$/i.test(activeElement.type || 'text'));
 
-    if (isTextInput && typeof activeElement.setSelectionRange === 'function' && Number.isInteger(activeElement.selectionEnd)) {
+    if (isTextInputElement(activeElement) && typeof activeElement.setSelectionRange === 'function' && Number.isInteger(activeElement.selectionEnd)) {
       activeElement.setSelectionRange(activeElement.selectionEnd, activeElement.selectionEnd);
     }
 
@@ -1149,13 +1153,17 @@
     updateApplyButtonState();
   }
 
+  /**
+   * Sends the current action request.
+   * When buffered context is used, "Apply" is disabled because the output no longer maps to one replaceable range.
+   */
   async function requestAI(action, textOverride, anchorRectOverride) {
     const isImageAnalysis = IMAGE_ANALYSIS_ACTIONS.has(action);
     const requestedText = textOverride || selectedText || '';
     const baseText = SelectionUtils.clampText(requestedText, MAX_TEXT_LENGTH);
     const usesSelectionContext = !isImageAnalysis && selectionContextEntries.length > 0;
     const text = usesSelectionContext
-      ? SelectionUtils.buildSelectionContext(selectionContextEntries, requestedText, MAX_TEXT_LENGTH)
+      ? SelectionUtils.buildSelectionContext(selectionContextEntries, baseText, MAX_TEXT_LENGTH)
       : baseText;
 
     // Image analysis actions need a selected image; all others need text.
