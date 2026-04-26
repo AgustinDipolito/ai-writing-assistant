@@ -11,6 +11,7 @@
   window.__aiWritingAssistantLoaded = true;
 
   const MAX_TEXT_LENGTH = 5000;
+  const MAX_CONTEXT_BADGE_COUNT = 9;
   const MENU_OFFSET = 10;
   const STREAM_PORT_NAME = 'ai_stream';
   const SelectionUtils = window.AWASelectionUtils || {
@@ -254,7 +255,7 @@
 
   function getContextButtonCount() {
     if (!selectionContextEntries.length) return '';
-    return selectionContextEntries.length > 9 ? '9+' : String(selectionContextEntries.length);
+    return selectionContextEntries.length > MAX_CONTEXT_BADGE_COUNT ? '9+' : String(selectionContextEntries.length);
   }
 
   function getContextButtonTitle() {
@@ -439,7 +440,8 @@
 
       if (visibleCustomActions.length > 0) {
         menu.classList.remove('ai-menu--setup');
-        const contextButton = `<button class="ai-menu-context-btn" data-role="add-context" title="${escapeAttr(getContextButtonTitle())}" aria-label="${escapeAttr(getContextButtonTitle())}" data-count="${escapeAttr(getContextButtonCount())}">${ICONS.add_context}</button>`;
+        const contextButtonTitle = getContextButtonTitle();
+        const contextButton = `<button class="ai-menu-context-btn" data-role="add-context" title="${escapeAttr(contextButtonTitle)}" aria-label="${escapeAttr(contextButtonTitle)}" data-count="${escapeAttr(getContextButtonCount())}">${ICONS.add_context}</button>`;
         const actionButtons = visibleCustomActions.map((ca) =>
           `<button class="ai-menu-btn" data-action="${ca.id}"><span class="icon" style="font-style:normal;">${ca.icon || '✏️'}</span>${escapeHtml(ca.name)}</button>`
         ).join('<div class="ai-menu-separator"></div>');
