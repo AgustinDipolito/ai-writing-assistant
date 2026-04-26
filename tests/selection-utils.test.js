@@ -116,7 +116,8 @@ test('appendSelectionContext appends trimmed entries without mutating the input 
 
 test('buildSelectionContext joins saved entries with the current selection and enforces max length', () => {
   const result = buildSelectionContext(['Part one', ' Part two '], ' Final bit ', 20);
-  assert.equal(result, 'Part one\n\nPart two\n\n');
+  assert.equal(result, 'Part one\n\nPart two');
+  assert.equal(result.includes('Final bit'), false);
 });
 
 test('applyInputSelectionSnapshot replaces selected range and emits events', () => {

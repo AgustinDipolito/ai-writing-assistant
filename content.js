@@ -287,7 +287,8 @@
   }
 
   function addCurrentSelectionToContext() {
-    const text = SelectionUtils.clampText(selectedText || getSelectionPayload().text || '', MAX_TEXT_LENGTH);
+    const payload = selectedText ? { text: selectedText } : getSelectionPayload();
+    const text = SelectionUtils.clampText(payload.text || '', MAX_TEXT_LENGTH);
     if (!text) return;
 
     selectionContextEntries = SelectionUtils.appendSelectionContext(selectionContextEntries, text, MAX_TEXT_LENGTH);
@@ -1148,10 +1149,11 @@
 
   async function requestAI(action, textOverride, anchorRectOverride) {
     const isImageAnalysis = IMAGE_ANALYSIS_ACTIONS.has(action);
-    const baseText = SelectionUtils.clampText(textOverride || selectedText || '', MAX_TEXT_LENGTH);
+    const requestedText = textOverride || selectedText || '';
+    const baseText = SelectionUtils.clampText(requestedText, MAX_TEXT_LENGTH);
     const usesSelectionContext = !isImageAnalysis && selectionContextEntries.length > 0;
     const text = usesSelectionContext
-      ? SelectionUtils.buildSelectionContext(selectionContextEntries, baseText, MAX_TEXT_LENGTH)
+      ? SelectionUtils.buildSelectionContext(selectionContextEntries, requestedText, MAX_TEXT_LENGTH)
       : baseText;
 
     // Image analysis actions need a selected image; all others need text.
@@ -1165,7 +1167,9 @@
     isLoading = true;
     setButtonsDisabled(true);
     activeResponseText = '';
-    selectionSnapshotForApply = usesSelectionContext ? null : captureSelectionSnapshot();
+    selectionSnapshotForApply = usesSelectionContext
+      ? null // Disable "Apply" because combined context spans multiple original selections.
+      : captureSelectionSnapshot();
     clearContextAfterRequest = usesSelectionContext;
     updateApplyButtonState();
 
