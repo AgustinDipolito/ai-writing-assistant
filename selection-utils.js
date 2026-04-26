@@ -87,6 +87,28 @@
     };
   }
 
+  function normalizeSelectionContextEntries(entries, maxLength) {
+    if (!Array.isArray(entries)) return [];
+
+    return entries
+      .map((entry) => clampText(entry, maxLength))
+      .filter(Boolean);
+  }
+
+  function appendSelectionContext(entries, nextText, maxLength = Number.MAX_SAFE_INTEGER) {
+    const normalizedEntries = normalizeSelectionContextEntries(entries, maxLength);
+    const normalizedText = clampText(nextText, maxLength);
+    if (!normalizedText) return normalizedEntries;
+    return [...normalizedEntries, normalizedText];
+  }
+
+  function buildSelectionContext(entries, currentText, maxLength, separator = '\n\n') {
+    const normalizedEntries = normalizeSelectionContextEntries(entries, maxLength);
+    const normalizedCurrentText = clampText(currentText, maxLength);
+    const parts = normalizedCurrentText ? [...normalizedEntries, normalizedCurrentText] : normalizedEntries;
+    return clampText(parts.join(separator), maxLength);
+  }
+
   function applyInputSelectionSnapshot(snapshot, replacementText) {
     if (!snapshot || !snapshot.target) return false;
 
@@ -120,6 +142,8 @@
     isZeroRect,
     getInputSelection,
     getInputSelectionSnapshot,
+    appendSelectionContext,
+    buildSelectionContext,
     applyInputSelectionSnapshot,
   };
 

@@ -43,6 +43,7 @@
     copy: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
     apply: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
     stop: `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>`,
+    add_context: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
     sparkle: `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0L14.59 8.41L23 11L14.59 13.59L12 22L9.41 13.59L1 11L9.41 8.41L12 0Z"/></svg>`,
     describe_image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`,
     extract_text: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/></svg>`,
@@ -72,6 +73,10 @@
     .ai-menu-btn:hover { background: #f1f5f9; color: #0f172a; }
     .ai-menu-btn:active { background: #e2e8f0; }
     .ai-menu-btn .icon { display: flex; align-items: center; flex-shrink: 0; }
+    .ai-menu-context-btn { all: unset; position: relative; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 6px; cursor: pointer; color: #94a3b8; transition: background 0.15s, color 0.15s; pointer-events: auto; flex-shrink: 0; }
+    .ai-menu-context-btn:hover { background: #f8fafc; color: #475569; }
+    .ai-menu-context-btn:active { background: #e2e8f0; }
+    .ai-menu-context-btn[data-count]:not([data-count=""])::after { content: attr(data-count); position: absolute; top: -3px; right: -3px; min-width: 13px; height: 13px; padding: 0 3px; border-radius: 999px; background: #6366f1; color: #ffffff; font-size: 9px; font-weight: 700; line-height: 13px; text-align: center; }
     .ai-menu-separator { width: 1px; height: 22px; background: #e2e8f0; flex-shrink: 0; }
     .ai-results { all: initial; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; position: fixed; display: none; flex-direction: column; width: 420px; max-width: calc(100vw - 24px); max-height: 60vh; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06); z-index: 2147483647; pointer-events: auto; animation: aiPanelSlideIn 0.2s ease-out; overflow: hidden; }
     @keyframes aiPanelSlideIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
@@ -126,6 +131,7 @@
     @media (prefers-color-scheme: dark) {
       .ai-menu { background: #1e1e2e; border-color: #313244; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.2); }
       .ai-menu-btn { color: #cdd6f4; } .ai-menu-btn:hover { background: #313244; color: #ffffff; } .ai-menu-btn:active { background: #45475a; }
+      .ai-menu-context-btn { color: #a6adc8; } .ai-menu-context-btn:hover { background: #313244; color: #ffffff; } .ai-menu-context-btn:active { background: #45475a; }
       .ai-menu-separator, .ai-results-header { border-color: #313244; }
       .ai-results { background: #1e1e2e; border-color: #313244; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.25); }
       .ai-results-title { color: #cdd6f4; } .ai-results-title .icon { color: #a5b4fc; }
@@ -189,6 +195,8 @@
   let activeRequestId = null;
   let activeResponseText = '';
   let selectionSnapshotForApply = null;
+  let selectionContextEntries = [];
+  let clearContextAfterRequest = false;
   let lastAnchorRect = null;
   let lastMousePoint = { x: Math.round(window.innerWidth / 2), y: Math.max(48, Math.round(window.innerHeight * 0.12)) };
 
@@ -242,6 +250,55 @@
     copyToast.textContent = message;
     copyToast.classList.add('show');
     setTimeout(() => copyToast.classList.remove('show'), 1500);
+  }
+
+  function getContextButtonCount() {
+    if (!selectionContextEntries.length) return '';
+    return selectionContextEntries.length > 9 ? '9+' : String(selectionContextEntries.length);
+  }
+
+  function getContextButtonTitle() {
+    if (!selectionContextEntries.length) return 'Add to context';
+    const label = selectionContextEntries.length === 1 ? 'fragment' : 'fragments';
+    return `Add to context (${selectionContextEntries.length} saved ${label})`;
+  }
+
+  function clearSelectionContext() {
+    if (!selectionContextEntries.length) return;
+    selectionContextEntries = [];
+    buildMenuButtons();
+  }
+
+  function clearCurrentTextSelection() {
+    const activeElement = document.activeElement;
+    const tagName = String(activeElement?.tagName || '').toUpperCase();
+    const isTextInput = tagName === 'TEXTAREA'
+      || (tagName === 'INPUT' && /^(text|search|url|tel|email|password)$/i.test(activeElement.type || 'text'));
+
+    if (isTextInput && typeof activeElement.setSelectionRange === 'function' && Number.isInteger(activeElement.selectionEnd)) {
+      activeElement.setSelectionRange(activeElement.selectionEnd, activeElement.selectionEnd);
+    }
+
+    try {
+      window.getSelection()?.removeAllRanges();
+    } catch {
+      // no-op
+    }
+  }
+
+  function addCurrentSelectionToContext() {
+    const text = SelectionUtils.clampText(selectedText || getSelectionPayload().text || '', MAX_TEXT_LENGTH);
+    if (!text) return;
+
+    selectionContextEntries = SelectionUtils.appendSelectionContext(selectionContextEntries, text, MAX_TEXT_LENGTH);
+    suppressUiUntil = Date.now() + 300;
+    clearCurrentTextSelection();
+    selectedText = '';
+    buildMenuButtons();
+    hideMenu();
+    setToast(selectionContextEntries.length === 1
+      ? 'Added to context'
+      : `Added to context (${selectionContextEntries.length})`);
   }
 
   function applyTextToContentEditable(snapshot, replacementText) {
@@ -381,9 +438,11 @@
 
       if (visibleCustomActions.length > 0) {
         menu.classList.remove('ai-menu--setup');
-        html = visibleCustomActions.map((ca) =>
+        const contextButton = `<button class="ai-menu-context-btn" data-role="add-context" title="${escapeAttr(getContextButtonTitle())}" aria-label="${escapeAttr(getContextButtonTitle())}" data-count="${escapeAttr(getContextButtonCount())}">${ICONS.add_context}</button>`;
+        const actionButtons = visibleCustomActions.map((ca) =>
           `<button class="ai-menu-btn" data-action="${ca.id}"><span class="icon" style="font-style:normal;">${ca.icon || '✏️'}</span>${escapeHtml(ca.name)}</button>`
         ).join('<div class="ai-menu-separator"></div>');
+        html = `${contextButton}<div class="ai-menu-separator"></div>${actionButtons}`;
       } else {
         menu.classList.add('ai-menu--setup');
         html = buildSetupHtml();
@@ -836,6 +895,7 @@
     try { window.getSelection()?.removeAllRanges(); } catch { /* no-op */ }
     cancelActiveStream();
     clearImageSelection();
+    clearSelectionContext();
     buildMenuButtons();
     hideMenu();
     hideResults();
@@ -846,6 +906,7 @@
     downloadBtn.dataset.href = '';
     selectionSnapshotForApply = null;
     activeResponseText = '';
+    clearContextAfterRequest = false;
     updateApplyButtonState();
     lastAnchorRect = null;
   }
@@ -1008,6 +1069,10 @@
         setButtonsDisabled(false);
         activeRequestId = null;
         stopBtn.style.display = 'none';
+        if (clearContextAfterRequest) {
+          clearSelectionContext();
+          clearContextAfterRequest = false;
+        }
         updateApplyButtonState();
         return;
       }
@@ -1019,6 +1084,10 @@
         setButtonsDisabled(false);
         activeRequestId = null;
         stopBtn.style.display = 'none';
+        if (clearContextAfterRequest) {
+          clearSelectionContext();
+          clearContextAfterRequest = false;
+        }
         updateApplyButtonState();
         return;
       }
@@ -1030,6 +1099,10 @@
         setButtonsDisabled(false);
         activeRequestId = null;
         stopBtn.style.display = 'none';
+        if (clearContextAfterRequest) {
+          clearSelectionContext();
+          clearContextAfterRequest = false;
+        }
         updateApplyButtonState();
       }
     });
@@ -1041,6 +1114,10 @@
         isLoading = false;
         setButtonsDisabled(false);
         activeRequestId = null;
+        if (clearContextAfterRequest) {
+          clearSelectionContext();
+          clearContextAfterRequest = false;
+        }
         updateApplyButtonState();
       }
     });
@@ -1070,8 +1147,12 @@
   }
 
   async function requestAI(action, textOverride, anchorRectOverride) {
-    const text = (textOverride || selectedText || '').trim();
     const isImageAnalysis = IMAGE_ANALYSIS_ACTIONS.has(action);
+    const baseText = SelectionUtils.clampText(textOverride || selectedText || '', MAX_TEXT_LENGTH);
+    const usesSelectionContext = !isImageAnalysis && selectionContextEntries.length > 0;
+    const text = usesSelectionContext
+      ? SelectionUtils.buildSelectionContext(selectionContextEntries, baseText, MAX_TEXT_LENGTH)
+      : baseText;
 
     // Image analysis actions need a selected image; all others need text.
     if (isImageAnalysis && !selectedImage) return;
@@ -1084,7 +1165,8 @@
     isLoading = true;
     setButtonsDisabled(true);
     activeResponseText = '';
-    selectionSnapshotForApply = captureSelectionSnapshot();
+    selectionSnapshotForApply = usesSelectionContext ? null : captureSelectionSnapshot();
+    clearContextAfterRequest = usesSelectionContext;
     updateApplyButtonState();
 
     // Capture the anchor rect BEFORE hiding the menu (hidden elements return zero rect).
@@ -1170,6 +1252,12 @@
   });
 
   menu.addEventListener('click', (e) => {
+    const contextButton = getClickedButton(e, '.ai-menu-context-btn');
+    if (contextButton) {
+      addCurrentSelectionToContext();
+      return;
+    }
+
     const button = getClickedButton(e, '.ai-menu-btn');
     if (button && !button.classList.contains('disabled')) {
       const action = button.dataset.action;
@@ -1207,6 +1295,10 @@
     if (role === 'stop') {
       cancelActiveStream();
       stopBtn.style.display = 'none';
+      if (clearContextAfterRequest) {
+        clearSelectionContext();
+        clearContextAfterRequest = false;
+      }
       // Keep the partial response visible
       if (activeResponseText) {
         showResultContent('', activeResponseText);
