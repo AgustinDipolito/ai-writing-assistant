@@ -63,63 +63,29 @@ test('LANGUAGE_INSTRUCTIONS contains expected language codes', () => {
 });
 
 // ============================================================
-// buildPrompt — built-in actions
+// buildPrompt — image actions
 // ============================================================
 
-test('buildPrompt includes selected text in grammar prompt', () => {
-  const prompt = buildPrompt('grammar', 'She dont know.', {});
-  assert.ok(prompt.includes('She dont know.'));
+test('buildPrompt includes language instruction for image action', () => {
+  const prompt = buildPrompt('describe_image', '', {});
   assert.ok(prompt.includes(LANGUAGE_INSTRUCTIONS.auto));
 });
 
-test('buildPrompt includes selected text in style prompt', () => {
-  const prompt = buildPrompt('style', 'Very unique idea.', {});
-  assert.ok(prompt.includes('Very unique idea.'));
-});
-
-test('buildPrompt includes selected text in synonyms prompt', () => {
-  const prompt = buildPrompt('synonyms', 'happy dog', {});
-  assert.ok(prompt.includes('happy dog'));
-});
-
 test('buildPrompt uses specified responseLanguage', () => {
-  const prompt = buildPrompt('grammar', 'Hola.', { responseLanguage: 'es' });
+  const prompt = buildPrompt('describe_image', '', { responseLanguage: 'es' });
   assert.ok(prompt.includes(LANGUAGE_INSTRUCTIONS.es));
   assert.ok(!prompt.includes(LANGUAGE_INSTRUCTIONS.auto));
 });
 
 test('buildPrompt falls back to auto language when responseLanguage is unknown', () => {
-  const prompt = buildPrompt('grammar', 'Text.', { responseLanguage: 'zzz' });
+  const prompt = buildPrompt('describe_image', '', { responseLanguage: 'zzz' });
   assert.ok(prompt.includes(LANGUAGE_INSTRUCTIONS.auto));
 });
 
-test('buildPrompt includes systemInstruction when provided', () => {
-  const prompt = buildPrompt('grammar', 'Test.', { systemInstruction: 'Be terse.' });
-  // systemInstruction is part of the Gemini body separately, not prepended to the prompt.
-  // Just confirm the base prompt is present.
-  assert.ok(prompt.includes('Test.'));
-});
-
-test('buildPrompt uses custom grammar prompt when configured', () => {
-  const prompt = buildPrompt('grammar', 'hello', { promptGrammar: 'Custom: {{TEXT}} done.' });
-  assert.ok(prompt.includes('Custom: hello done.'));
-  assert.ok(!prompt.includes('{{TEXT}}'));
-});
-
-test('buildPrompt uses custom style prompt when configured', () => {
-  const prompt = buildPrompt('style', 'world', { promptStyle: 'Restyle: {{TEXT}} end.' });
-  assert.ok(prompt.includes('Restyle: world end.'));
-});
-
-test('buildPrompt uses custom synonyms prompt when configured', () => {
-  const prompt = buildPrompt('synonyms', 'cat', { promptSynonyms: 'Synonyms for {{TEXT}}.' });
-  assert.ok(prompt.includes('Synonyms for cat.'));
-});
-
-test('buildPrompt appends text when custom prompt has no {{TEXT}}', () => {
-  const prompt = buildPrompt('grammar', 'dog', { promptGrammar: 'Fix grammar.' });
-  assert.ok(prompt.includes('Fix grammar.'));
-  assert.ok(prompt.includes('dog'));
+test('buildPrompt returns string for describe_image action', () => {
+  const prompt = buildPrompt('describe_image', '', {});
+  assert.equal(typeof prompt, 'string');
+  assert.ok(prompt.length > 0);
 });
 
 // ============================================================

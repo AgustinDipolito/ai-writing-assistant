@@ -25,66 +25,12 @@ const LANGUAGE_INSTRUCTIONS = {
 };
 
 const BASE_ACTIONS = [
-  { id: 'grammar', label: 'Grammar' },
-  { id: 'style', label: 'Style' },
-  { id: 'synonyms', label: 'Synonyms' },
   { id: 'generate_image', label: '🎨 Generate Image' },
 ];
 
 const IMAGE_ANALYSIS_ACTIONS = new Set(['describe_image', 'extract_text', 'analyze_image']);
 
 const DEFAULT_PROMPTS = {
-  grammar: (text, lang) =>
-    `You are an expert proofreader. Check the following text for grammar, spelling, and punctuation errors.
-
-For each error found:
-1. Quote the error
-2. Explain why it's wrong
-3. Provide the corrected version
-
-If no errors are found, say "✅ No grammar issues found — the text looks great!"
-
-${lang}. Use clear formatting with bullet points.
-
-Text to check:
-"""
-${text}
-"""`,
-
-  style: (text, lang) =>
-    `You are an expert writing coach. Analyze the following text for writing style improvements.
-
-Evaluate and suggest improvements for:
-- **Clarity** — Is the meaning easy to understand?
-- **Conciseness** — Are there unnecessary words or redundancies?
-- **Tone** — Is the tone consistent and appropriate?
-- **Readability** — Could sentence structure be improved?
-- **Word choice** — Are there better alternatives for any words?
-
-Provide specific rewritten alternatives for each suggestion.
-
-${lang}. Use clear formatting.
-
-Text to analyze:
-"""
-${text}
-"""`,
-
-  synonyms: (text, lang) =>
-    `You are a vocabulary expert and thesaurus. For each significant content word in the following text (skip articles, prepositions, conjunctions, pronouns, and very common verbs like "is/are/was/were/have/has"), provide 2-4 synonyms.
-
-Format each entry as:
-**word** → synonym1, synonym2, synonym3
-
-Group by word class (nouns, verbs, adjectives, adverbs) if the text is long enough.
-
-${lang}.
-
-Text:
-"""
-${text}
-"""`,
-
   describe_image: (_text, lang) =>
     `You are a visual analyst. Describe this image in detail, including:
 - Main subjects and objects present
@@ -115,22 +61,6 @@ ${lang}. Use clear formatting with sections.`,
 function buildPrompt(action, text, config) {
   const langKey = config.responseLanguage || 'auto';
   const langInstruction = LANGUAGE_INSTRUCTIONS[langKey] || LANGUAGE_INSTRUCTIONS.auto;
-
-  const customPromptMap = {
-    grammar: config.promptGrammar,
-    style: config.promptStyle,
-    synonyms: config.promptSynonyms,
-  };
-
-  const customPrompt = customPromptMap[action];
-
-  if (customPrompt) {
-    let prompt = customPrompt.replace(/\{\{TEXT\}\}/gi, text);
-    if (!customPrompt.match(/\{\{TEXT\}\}/i)) {
-      prompt += `\n\nText:\n"""\n${text}\n"""`;
-    }
-    return `${langInstruction}\n\n${prompt}`;
-  }
 
   return DEFAULT_PROMPTS[action](text, langInstruction);
 }

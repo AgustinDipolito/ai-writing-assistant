@@ -6,7 +6,7 @@ A Chrome extension that brings AI writing help to every web page. Select text or
 
 ## Overview
 
-Select text anywhere in Chrome. A small floating menu appears. Choose an action — grammar check, style improvement, synonym lookup, or any custom action you have defined. The result streams into a panel in real time. Copy it, apply it directly to the original field, or dismiss and keep browsing.
+Select text anywhere in Chrome. A small floating menu appears. Choose any custom action you have defined. The result streams into a panel in real time. Copy it, apply it directly to the original field, or dismiss and keep browsing.
 
 No backend, no data collection. Every API call goes directly from your browser to the provider you choose.
 
@@ -23,14 +23,6 @@ No backend, no data collection. Every API call goes directly from your browser t
 - Apply button replaces the selected text in-place for `<input>`, `<textarea>`, and `contenteditable` elements.
 - Light and dark themes follow the system `prefers-color-scheme`.
 - All configuration stored locally with `chrome.storage.local`.
-
-### Examples Built-in actions
-
-| Action   | What it does                                                        |
-|----------|---------------------------------------------------------------------|
-| Grammar  | Identifies errors, explains each one, and provides the correction.  |
-| Style    | Evaluates clarity, conciseness, tone, readability, and word choice. |
-| Synonyms | Lists 2-4 synonyms for every significant word in the selection.     |
 
 ---
 
@@ -89,15 +81,10 @@ All settings are available in the Options page.
 | Max tokens         | Maximum length of the response.                                             |
 | Response language  | Force a specific output language, or auto-detect from the input text.       |
 | System instruction | A global instruction prepended to every request.                            |
-| Action prompts     | Override the default prompt for Grammar, Style, or Synonyms individually.  |
-
-### Per-action overrides
-
-Each built-in action (Grammar, Style, Synonyms) can override the model, temperature, and max tokens independently of the global setting.
 
 ### Custom actions
 
-Custom actions appear in both the floating menu and the context menu alongside the built-in ones.
+Custom actions appear in both the floating menu and the context menu.
 
 Each custom action has:
 - **Name** - label shown on the button.
@@ -171,13 +158,7 @@ Configuration is stored under the key `providerConfig` in `chrome.storage.local`
   activeProvider: 'gemini' | 'openai',
   gemini: {
     apiKey, model, temperature, maxTokens,
-    responseLanguage, promptGrammar, promptStyle, promptSynonyms,
-    systemInstruction,
-    actionOverrides: {
-      grammar:  { model, temperature, maxTokens },
-      style:    { model, temperature, maxTokens },
-      synonyms: { model, temperature, maxTokens },
-    }
+    responseLanguage, systemInstruction,
   },
   openai: { /* same shape */ }
 }
@@ -238,15 +219,7 @@ Tests use Node's built-in test runner. The test suite covers the shared selectio
 
 The roadmap is organized around a single goal: **make LLMs and AI agents accessible on every web page**, regardless of provider, model, or workflow.
 
-### Tier 1 — Universal LLM Access
-
-| Feature | Description |
-|---|---|
-| **Multi-provider router** | Add Anthropic Claude, OpenRouter (meta-adapter for 100+ models), and Ollama for local/self-hosted models. One extension, any LLM. |
-| **Sidebar chat** | Persistent side panel for freeform conversation with any model while browsing. Page content is available as context automatically. |
-| **Page-aware context** | Inject the visible page (or a selection of it) into every prompt so the LLM understands what the user is looking at — summaries, Q&A, and data extraction become one-click actions. |
-
-### Tier 2 — Agentic Workflows
+### Tier 1 — Agentic Workflows
 
 | Feature | Description |
 |---|---|
@@ -255,7 +228,7 @@ The roadmap is organized around a single goal: **make LLMs and AI agents accessi
 | **Cross-tab context** | Let agents pull context from multiple open tabs so workflows can span sites (e.g., compare two product pages). |
 | **Model Context Protocol (MCP) integration** | Connect to external tools and data sources via MCP, turning the browser into a full agent runtime. |
 
-### Tier 3 — Platform & Ecosystem
+### Tier 2 — Platform & Ecosystem
 
 | Feature | Description |
 |---|---|
