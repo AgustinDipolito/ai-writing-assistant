@@ -24,10 +24,6 @@ const LANGUAGE_INSTRUCTIONS = {
   ko: '한국어로 답변해 주세요.',
 };
 
-const BASE_ACTIONS = [
-  { id: 'generate_image', label: '🎨 Generate Image' },
-];
-
 const IMAGE_ANALYSIS_ACTIONS = new Set(['describe_image', 'extract_text', 'analyze_image']);
 
 const DEFAULT_PROMPTS = {
@@ -1349,7 +1345,6 @@ if (typeof module !== 'undefined' && module.exports) {
     LANGUAGE_INSTRUCTIONS,
     DEFAULT_PROMPTS,
     IMAGE_ANALYSIS_ACTIONS,
-    BASE_ACTIONS,
     buildPrompt,
     buildCustomPrompt,
     buildEnhancePrompt,

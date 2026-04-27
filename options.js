@@ -125,6 +125,7 @@ function switchProviderPanel(providerId) {
     providerPanels[id].style.display = id === providerId ? '' : 'none';
   });
   populateModelSelect(providerId);
+  syncCardsToData();
   renderActionCards();
   updateFooter(providerId);
 }

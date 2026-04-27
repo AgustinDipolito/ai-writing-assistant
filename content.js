@@ -1061,7 +1061,7 @@
         }
         // Only update text display if the result wasn't already shown as an image.
         if (activeResponseText.trim()) {
-          showResultContent(message.action || 'grammar', activeResponseText);
+          showResultContent(message.action || '', activeResponseText);
         }
         isLoading = false;
         setButtonsDisabled(false);
