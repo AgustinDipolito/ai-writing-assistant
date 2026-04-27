@@ -211,6 +211,7 @@ This folder contains strategic planning documents for AI Writing Assistant, desi
 - ✅ Multi-provider architecture (5 providers: Gemini, OpenAI, Anthropic, OpenRouter, Ollama)
 - ✅ Streaming SSE (real-time responses)
 - ✅ Shadow DOM UI (zero style conflicts)
+- ✅ Image generation (Gemini) and image analysis (describe, extract text, analyze) for any page image
 - ⚠️ Sidebar chat panel (not yet built)
 - ⚠️ Page-aware context injection (not yet built)
 - ⚠️ Freemium paywall (not yet built)
