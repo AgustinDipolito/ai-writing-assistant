@@ -7,6 +7,8 @@ const {
   isZeroRect,
   getInputSelection,
   getInputSelectionSnapshot,
+  appendSelectionContext,
+  buildSelectionContext,
   applyInputSelectionSnapshot,
 } = require('../selection-utils.js');
 
@@ -102,6 +104,20 @@ test('getInputSelectionSnapshot returns metadata for replacement', () => {
   assert.equal(snapshot.start, 6);
   assert.equal(snapshot.end, 10);
   assert.equal(snapshot.text, 'beta');
+});
+
+test('appendSelectionContext appends trimmed entries without mutating the input array', () => {
+  const existing = [' first bit ', '', 'second bit'];
+  const result = appendSelectionContext(existing, '  third bit  ', 5000);
+
+  assert.deepEqual(existing, [' first bit ', '', 'second bit']);
+  assert.deepEqual(result, ['first bit', 'second bit', 'third bit']);
+});
+
+test('buildSelectionContext joins saved entries with the current selection and enforces max length', () => {
+  const result = buildSelectionContext(['Part one', ' Part two '], ' Final bit ', 20);
+  assert.equal(result, 'Part one\n\nPart two');
+  assert.equal(result.includes('Final bit'), false);
 });
 
 test('applyInputSelectionSnapshot replaces selected range and emits events', () => {
