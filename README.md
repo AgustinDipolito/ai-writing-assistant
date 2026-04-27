@@ -90,7 +90,7 @@ All settings are available in the Options page.
 
 | Setting            | Description                                                                 |
 |--------------------|-----------------------------------------------------------------------------|
-| Provider           | Active AI provider: Gemini, OpenAI, Anthropic, OpenRouter, or Ollama.              |
+| Provider           | Active AI provider: Gemini, OpenAI, Anthropic, OpenRouter, or Ollama.       |
 | Model              | Model to use for the selected provider.                                     |
 | Temperature        | Controls response creativity (0 = deterministic, 1 = most varied).         |
 | Max tokens         | Maximum length of the response.                                             |
