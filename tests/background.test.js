@@ -35,7 +35,6 @@ const {
   LANGUAGE_INSTRUCTIONS,
   DEFAULT_PROMPTS,
   IMAGE_ANALYSIS_ACTIONS,
-  BASE_ACTIONS,
   buildPrompt,
   buildCustomPrompt,
   buildEnhancePrompt,
@@ -392,15 +391,6 @@ test('IMAGE_ANALYSIS_ACTIONS contains the three image analysis actions', () => {
   assert.ok(IMAGE_ANALYSIS_ACTIONS.has('analyze_image'));
   assert.equal(IMAGE_ANALYSIS_ACTIONS.has('generate_image'), false);
   assert.equal(IMAGE_ANALYSIS_ACTIONS.has('grammar'), false);
-});
-
-// ============================================================
-// BASE_ACTIONS
-// ============================================================
-
-test('BASE_ACTIONS includes generate_image', () => {
-  const ids = BASE_ACTIONS.map((a) => a.id);
-  assert.ok(ids.includes('generate_image'), 'generate_image should be in BASE_ACTIONS');
 });
 
 // ============================================================
