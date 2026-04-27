@@ -688,9 +688,9 @@ function renderActionCards() {
           </div>
           <textarea class="action-prompt" placeholder="Write your prompt here. Use {{TEXT}} for the selected text." data-index="${index}">${escapeHtml(action.prompt)}</textarea>
         </div>
-        <div>
-          <label>Per-Action Overrides (${PROVIDERS[providerId].label})</label>
-          <div class="override-fields">
+        <details class="action-overrides-details">
+          <summary class="action-overrides-summary">⚙️ Advanced (${PROVIDERS[providerId].label} overrides)</summary>
+          <div class="override-fields" style="margin-top:8px;">
             <div>
               <label>Model</label>
               <select class="action-override-model" data-index="${index}">
@@ -706,7 +706,7 @@ function renderActionCards() {
               <input type="number" class="action-override-tokens" data-index="${index}" min="100" max="8000" step="100" placeholder="Global" value="${getCustomActionOverride(action, providerId).maxTokens ?? ''}">
             </div>
           </div>
-        </div>
+        </details>
       </div>
     </div>
   `).join('');
