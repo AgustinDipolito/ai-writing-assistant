@@ -1345,10 +1345,11 @@
           hidden: false,
         };
         chrome.storage.local.get('customActions', ({ customActions: existing }) => {
-          chrome.storage.local.set({ customActions: [...(existing || []), newAction] });
-          // The storage onChanged listener will rebuild the menu automatically.
+          chrome.storage.local.set({ customActions: [...(existing || []), newAction] }, () => {
+            // The storage onChanged listener will rebuild the menu automatically.
+            hideMenu();
+          });
         });
-        hideMenu();
       }
     }
   });
