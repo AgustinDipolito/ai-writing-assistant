@@ -40,6 +40,8 @@ const {
   buildCustomPrompt,
   buildEnhancePrompt,
   buildGenerateActionsPrompt,
+  supportsGeneration,
+  processSSEStream,
   coerceTemperature,
   coerceMaxTokens,
   normalizeActionOverride,
@@ -1122,4 +1124,707 @@ test('ollamaAdapter.listModels returns empty array when models is empty', async 
   assert.equal(models.length, 0);
 
   delete global.fetch;
+});
+
+// ============================================================
+// ollamaAdapter.test — error path
+// ============================================================
+
+test('ollamaAdapter.test throws on non-ok response', async () => {
+  global.fetch = async () => ({
+    ok: false,
+    status: 503,
+    json: async () => ({ error: 'Ollama not running.' }),
+  });
+
+  await assert.rejects(
+    () => ollamaAdapter.test('', 'llama3.2', {}),
+    (err) => {
+      assert.ok(err.message.includes('Ollama not running.') || err.message.includes('503'));
+      return true;
+    }
+  );
+
+  delete global.fetch;
+});
+
+// ============================================================
+// ollamaAdapter._buildMessages
+// ============================================================
+
+test('ollamaAdapter._buildMessages returns single user message for text-only prompt', () => {
+  const messages = ollamaAdapter._buildMessages('Hello', {}, null);
+  assert.equal(messages.length, 1);
+  assert.equal(messages[0].role, 'user');
+  assert.equal(messages[0].content, 'Hello');
+});
+
+test('ollamaAdapter._buildMessages prepends system message when systemInstruction is set', () => {
+  const messages = ollamaAdapter._buildMessages('Hello', { systemInstruction: 'Be concise.' }, null);
+  assert.equal(messages.length, 2);
+  assert.equal(messages[0].role, 'system');
+  assert.equal(messages[0].content, 'Be concise.');
+  assert.equal(messages[1].role, 'user');
+  assert.equal(messages[1].content, 'Hello');
+});
+
+test('ollamaAdapter._buildMessages includes image_url content when imageData is provided', () => {
+  const imageData = 'data:image/png;base64,abc123';
+  const messages = ollamaAdapter._buildMessages('describe this', {}, imageData);
+  assert.equal(messages.length, 1);
+  const userMsg = messages[0];
+  assert.ok(Array.isArray(userMsg.content));
+  assert.equal(userMsg.content[0].type, 'image_url');
+  assert.equal(userMsg.content[0].image_url.url, imageData);
+  assert.equal(userMsg.content[1].type, 'text');
+  assert.equal(userMsg.content[1].text, 'describe this');
+});
+
+// ============================================================
+// anthropicAdapter._buildBody
+// ============================================================
+
+test('anthropicAdapter._buildBody sets model and max_tokens', () => {
+  const body = anthropicAdapter._buildBody('prompt', { model: 'claude-3-5-haiku-20241022', maxTokens: 800 }, null);
+  assert.equal(body.model, 'claude-3-5-haiku-20241022');
+  assert.equal(body.max_tokens, 800);
+  assert.ok(Array.isArray(body.messages));
+  assert.equal(body.messages[0].role, 'user');
+});
+
+test('anthropicAdapter._buildBody sets system field when systemInstruction provided', () => {
+  const body = anthropicAdapter._buildBody('prompt', { systemInstruction: 'Be brief.' }, null);
+  assert.equal(body.system, 'Be brief.');
+});
+
+test('anthropicAdapter._buildBody sets stream flag when requested', () => {
+  const body = anthropicAdapter._buildBody('prompt', {}, null, true);
+  assert.equal(body.stream, true);
+});
+
+test('anthropicAdapter._buildBody omits stream when not requested', () => {
+  const body = anthropicAdapter._buildBody('prompt', {}, null, false);
+  assert.ok(!Object.hasOwn(body, 'stream'));
+});
+
+test('anthropicAdapter._buildBody defaults to adapter defaultModel when config.model is absent', () => {
+  const body = anthropicAdapter._buildBody('prompt', {}, null);
+  assert.equal(body.model, anthropicAdapter.defaultModel);
+});
+
+// ============================================================
+// buildPrompt — image analysis actions
+// ============================================================
+
+test('buildPrompt returns string for describe_image action', () => {
+  const prompt = buildPrompt('describe_image', '', {});
+  assert.equal(typeof prompt, 'string');
+  assert.ok(prompt.length > 0);
+  assert.ok(prompt.includes(LANGUAGE_INSTRUCTIONS.auto));
+});
+
+test('buildPrompt returns string for extract_text action', () => {
+  const prompt = buildPrompt('extract_text', '', {});
+  assert.equal(typeof prompt, 'string');
+  assert.ok(prompt.length > 0);
+});
+
+test('buildPrompt returns string for analyze_image action', () => {
+  const prompt = buildPrompt('analyze_image', '', {});
+  assert.equal(typeof prompt, 'string');
+  assert.ok(prompt.length > 0);
+});
+
+test('buildPrompt returns text unchanged for generate_image action', () => {
+  const prompt = buildPrompt('generate_image', 'a majestic mountain', {});
+  assert.ok(prompt.includes('a majestic mountain'));
+});
+
+// ============================================================
+// geminiAdapter.call
+// ============================================================
+
+test('geminiAdapter.call returns text from response', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      candidates: [{ content: { parts: [{ text: 'Grammar looks good.' }] } }],
+    }),
+  });
+
+  const result = await geminiAdapter.call('Check grammar.', 'test-key', {});
+  assert.equal(result, 'Grammar looks good.');
+
+  delete global.fetch;
+});
+
+test('geminiAdapter.call concatenates multiple text parts', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      candidates: [{ content: { parts: [{ text: 'Part one. ' }, { text: 'Part two.' }] } }],
+    }),
+  });
+
+  const result = await geminiAdapter.call('prompt', 'key', {});
+  assert.equal(result, 'Part one. Part two.');
+
+  delete global.fetch;
+});
+
+test('geminiAdapter.call throws on API error response', async () => {
+  global.fetch = async () => ({
+    ok: false,
+    status: 400,
+    json: async () => ({ error: { message: 'Bad request.' } }),
+  });
+
+  await assert.rejects(
+    () => geminiAdapter.call('prompt', 'key', {}),
+    (err) => {
+      assert.ok(err.message.includes('Bad request.'));
+      return true;
+    }
+  );
+
+  delete global.fetch;
+});
+
+test('geminiAdapter.call throws when response has no candidates', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({ candidates: [] }),
+  });
+
+  await assert.rejects(
+    () => geminiAdapter.call('prompt', 'key', {}),
+    (err) => {
+      assert.ok(err.message.toLowerCase().includes('empty'));
+      return true;
+    }
+  );
+
+  delete global.fetch;
+});
+
+test('geminiAdapter.call sends systemInstruction in request body', async () => {
+  let capturedBody;
+  global.fetch = async (_url, opts) => {
+    capturedBody = JSON.parse(opts.body);
+    return {
+      ok: true,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: 'ok' }] } }],
+      }),
+    };
+  };
+
+  await geminiAdapter.call('prompt', 'key', { systemInstruction: 'Be brief.' });
+  assert.ok(capturedBody.systemInstruction);
+  assert.equal(capturedBody.systemInstruction.parts[0].text, 'Be brief.');
+
+  delete global.fetch;
+});
+
+test('geminiAdapter.call includes base64 imageData in request parts', async () => {
+  let capturedBody;
+  global.fetch = async (_url, opts) => {
+    capturedBody = JSON.parse(opts.body);
+    return {
+      ok: true,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: 'ok' }] } }],
+      }),
+    };
+  };
+
+  const imageData = 'data:image/png;base64,iVBORw0K';
+  await geminiAdapter.call('describe this', 'key', {}, imageData);
+  const parts = capturedBody.contents[0].parts;
+  assert.ok(parts.some((p) => p.inlineData?.mimeType === 'image/png'));
+
+  delete global.fetch;
+});
+
+// ============================================================
+// geminiAdapter.test
+// ============================================================
+
+test('geminiAdapter.test returns response text on success', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      candidates: [{ content: { parts: [{ text: 'Connection successful!' }] } }],
+    }),
+  });
+
+  const result = await geminiAdapter.test('test-key', 'gemini-2.0-flash');
+  assert.equal(result, 'Connection successful!');
+
+  delete global.fetch;
+});
+
+test('geminiAdapter.test throws on non-ok response', async () => {
+  global.fetch = async () => ({
+    ok: false,
+    status: 401,
+    json: async () => ({ error: { message: 'API key not valid.' } }),
+  });
+
+  await assert.rejects(
+    () => geminiAdapter.test('bad-key', 'gemini-2.0-flash'),
+    (err) => {
+      assert.ok(err.message.includes('API key not valid.'));
+      return true;
+    }
+  );
+
+  delete global.fetch;
+});
+
+test('geminiAdapter.test uses defaultModel when model argument is omitted', async () => {
+  let capturedUrl;
+  global.fetch = async (url) => {
+    capturedUrl = url;
+    return {
+      ok: true,
+      json: async () => ({
+        candidates: [{ content: { parts: [{ text: 'ok' }] } }],
+      }),
+    };
+  };
+
+  await geminiAdapter.test('key');
+  assert.ok(capturedUrl.includes(geminiAdapter.defaultModel));
+
+  delete global.fetch;
+});
+
+// ============================================================
+// geminiAdapter.generateImage
+// ============================================================
+
+test('geminiAdapter.generateImage returns imageDataUrl and mimeType', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      candidates: [
+        {
+          content: {
+            parts: [{ inlineData: { mimeType: 'image/png', data: 'base64encodeddata' } }],
+          },
+        },
+      ],
+    }),
+  });
+
+  const result = await geminiAdapter.generateImage('a sunset', 'test-key', {});
+  assert.equal(result.mimeType, 'image/png');
+  assert.ok(result.imageDataUrl.startsWith('data:image/png;base64,'));
+  assert.ok(result.imageDataUrl.includes('base64encodeddata'));
+
+  delete global.fetch;
+});
+
+test('geminiAdapter.generateImage throws on API error', async () => {
+  global.fetch = async () => ({
+    ok: false,
+    status: 400,
+    json: async () => ({ error: { message: 'Model not found.' } }),
+  });
+
+  await assert.rejects(
+    () => geminiAdapter.generateImage('prompt', 'key', {}),
+    (err) => {
+      assert.ok(err.message.includes('Model not found.'));
+      return true;
+    }
+  );
+
+  delete global.fetch;
+});
+
+test('geminiAdapter.generateImage throws when response contains no image part', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      candidates: [{ content: { parts: [{ text: 'I cannot generate images.' }] } }],
+    }),
+  });
+
+  await assert.rejects(
+    () => geminiAdapter.generateImage('prompt', 'key', {}),
+    (err) => {
+      assert.ok(err.message.toLowerCase().includes('image'));
+      return true;
+    }
+  );
+
+  delete global.fetch;
+});
+
+// ============================================================
+// openaiAdapter.call
+// ============================================================
+
+test('openaiAdapter.call returns text from response', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{ message: { content: 'Style improved.' } }],
+    }),
+  });
+
+  const result = await openaiAdapter.call('Improve style.', 'sk-key', {});
+  assert.equal(result, 'Style improved.');
+
+  delete global.fetch;
+});
+
+test('openaiAdapter.call throws on API error response', async () => {
+  global.fetch = async () => ({
+    ok: false,
+    status: 429,
+    json: async () => ({ error: { message: 'Rate limit exceeded.' } }),
+  });
+
+  await assert.rejects(
+    () => openaiAdapter.call('prompt', 'key', {}),
+    (err) => {
+      assert.ok(err.message.includes('Rate limit exceeded.'));
+      return true;
+    }
+  );
+
+  delete global.fetch;
+});
+
+test('openaiAdapter.call throws when response has no content', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({ choices: [{ message: { content: null } }] }),
+  });
+
+  await assert.rejects(
+    () => openaiAdapter.call('prompt', 'key', {}),
+    (err) => {
+      assert.ok(err.message.toLowerCase().includes('empty'));
+      return true;
+    }
+  );
+
+  delete global.fetch;
+});
+
+test('openaiAdapter.call includes systemInstruction as system message', async () => {
+  let capturedBody;
+  global.fetch = async (_url, opts) => {
+    capturedBody = JSON.parse(opts.body);
+    return {
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'ok' } }] }),
+    };
+  };
+
+  await openaiAdapter.call('prompt', 'key', { systemInstruction: 'Be terse.' });
+  const systemMsg = capturedBody.messages.find((m) => m.role === 'system');
+  assert.ok(systemMsg);
+  assert.equal(systemMsg.content, 'Be terse.');
+
+  delete global.fetch;
+});
+
+test('openaiAdapter.call uses vision-capable model when imageData is provided', async () => {
+  let capturedBody;
+  global.fetch = async (_url, opts) => {
+    capturedBody = JSON.parse(opts.body);
+    return {
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'ok' } }] }),
+    };
+  };
+
+  const imageData = 'data:image/jpeg;base64,/9j/abc';
+  await openaiAdapter.call('describe', 'key', { model: 'gpt-3.5-turbo' }, imageData);
+  // gpt-3.5-turbo is not vision-capable; should fall back to gpt-4o-mini
+  assert.ok(openaiAdapter.visionModels.has(capturedBody.model));
+  const userMsg = capturedBody.messages.find((m) => m.role === 'user');
+  assert.ok(Array.isArray(userMsg.content));
+  assert.equal(userMsg.content[0].type, 'image_url');
+
+  delete global.fetch;
+});
+
+test('openaiAdapter.call sends correct Authorization header', async () => {
+  let capturedHeaders;
+  global.fetch = async (_url, opts) => {
+    capturedHeaders = opts.headers;
+    return {
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'ok' } }] }),
+    };
+  };
+
+  await openaiAdapter.call('prompt', 'sk-my-key', {});
+  assert.equal(capturedHeaders['Authorization'], 'Bearer sk-my-key');
+
+  delete global.fetch;
+});
+
+// ============================================================
+// openaiAdapter.test
+// ============================================================
+
+test('openaiAdapter.test returns response text on success', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      choices: [{ message: { content: 'Connection successful!' } }],
+    }),
+  });
+
+  const result = await openaiAdapter.test('sk-key', 'gpt-4o-mini');
+  assert.equal(result, 'Connection successful!');
+
+  delete global.fetch;
+});
+
+test('openaiAdapter.test throws on non-ok response', async () => {
+  global.fetch = async () => ({
+    ok: false,
+    status: 401,
+    json: async () => ({ error: { message: 'Incorrect API key.' } }),
+  });
+
+  await assert.rejects(
+    () => openaiAdapter.test('bad-key', 'gpt-4o-mini'),
+    (err) => {
+      assert.ok(err.message.includes('Incorrect API key.'));
+      return true;
+    }
+  );
+
+  delete global.fetch;
+});
+
+test('openaiAdapter.test uses defaultModel when model argument is omitted', async () => {
+  let capturedBody;
+  global.fetch = async (_url, opts) => {
+    capturedBody = JSON.parse(opts.body);
+    return {
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: 'ok' } }] }),
+    };
+  };
+
+  await openaiAdapter.test('key');
+  assert.equal(capturedBody.model, openaiAdapter.defaultModel);
+
+  delete global.fetch;
+});
+
+// ============================================================
+// openaiAdapter.generateImage
+// ============================================================
+
+test('openaiAdapter.generateImage returns imageDataUrl and mimeType', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({
+      data: [{ b64_json: 'base64imagedata' }],
+    }),
+  });
+
+  const result = await openaiAdapter.generateImage('a mountain', 'sk-key', {});
+  assert.equal(result.mimeType, 'image/png');
+  assert.ok(result.imageDataUrl.startsWith('data:image/png;base64,'));
+  assert.ok(result.imageDataUrl.includes('base64imagedata'));
+
+  delete global.fetch;
+});
+
+test('openaiAdapter.generateImage throws on API error', async () => {
+  global.fetch = async () => ({
+    ok: false,
+    status: 400,
+    json: async () => ({ error: { message: 'Content policy violation.' } }),
+  });
+
+  await assert.rejects(
+    () => openaiAdapter.generateImage('prompt', 'key', {}),
+    (err) => {
+      assert.ok(err.message.includes('Content policy violation.'));
+      return true;
+    }
+  );
+
+  delete global.fetch;
+});
+
+test('openaiAdapter.generateImage throws when response contains no image data', async () => {
+  global.fetch = async () => ({
+    ok: true,
+    json: async () => ({ data: [] }),
+  });
+
+  await assert.rejects(
+    () => openaiAdapter.generateImage('prompt', 'key', {}),
+    (err) => {
+      assert.ok(err.message.toLowerCase().includes('image'));
+      return true;
+    }
+  );
+
+  delete global.fetch;
+});
+
+// ============================================================
+// supportsGeneration
+// ============================================================
+
+test('supportsGeneration returns true for model that supports generateContent', () => {
+  assert.equal(
+    supportsGeneration({ supportedGenerationMethods: ['generateContent', 'countTokens'] }),
+    true
+  );
+});
+
+test('supportsGeneration returns false for model that does not support generateContent', () => {
+  assert.equal(
+    supportsGeneration({ supportedGenerationMethods: ['embedContent'] }),
+    false
+  );
+});
+
+test('supportsGeneration returns false when supportedGenerationMethods is absent', () => {
+  assert.equal(supportsGeneration({}), false);
+  assert.equal(supportsGeneration({ supportedGenerationMethods: null }), false);
+});
+
+// ============================================================
+// processSSEStream
+// ============================================================
+
+function makeStreamResponse(chunks) {
+  const encoder = new TextEncoder();
+  let index = 0;
+  const readable = new ReadableStream({
+    pull(controller) {
+      if (index >= chunks.length) {
+        controller.close();
+        return;
+      }
+      controller.enqueue(encoder.encode(chunks[index++]));
+    },
+  });
+  return { ok: true, body: readable, text: async () => '' };
+}
+
+test('processSSEStream accumulates deltas and returns full text (LF framing)', async () => {
+  const chunks = [
+    'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
+    'data: {"choices":[{"delta":{"content":" world"}}]}\n\n',
+    'data: [DONE]\n\n',
+  ];
+
+  const received = [];
+  const result = await processSSEStream(
+    makeStreamResponse(chunks),
+    (data) => data?.choices?.[0]?.delta?.content || '',
+    (delta) => received.push(delta),
+    null
+  );
+
+  assert.equal(result, 'Hello world');
+  assert.deepEqual(received, ['Hello', ' world']);
+});
+
+test('processSSEStream handles CRLF event framing', async () => {
+  const chunks = [
+    'data: {"choices":[{"delta":{"content":"Hi"}}]}\r\n\r\n',
+    'data: [DONE]\r\n\r\n',
+  ];
+
+  const received = [];
+  const result = await processSSEStream(
+    makeStreamResponse(chunks),
+    (data) => data?.choices?.[0]?.delta?.content || '',
+    (delta) => received.push(delta),
+    null
+  );
+
+  assert.equal(result, 'Hi');
+  assert.deepEqual(received, ['Hi']);
+});
+
+test('processSSEStream stops at [DONE] and returns accumulated text', async () => {
+  const chunks = [
+    'data: {"choices":[{"delta":{"content":"stop here"}}]}\n\n',
+    'data: [DONE]\n\n',
+    'data: {"choices":[{"delta":{"content":"never seen"}}]}\n\n',
+  ];
+
+  const result = await processSSEStream(
+    makeStreamResponse(chunks),
+    (data) => data?.choices?.[0]?.delta?.content || '',
+    () => {},
+    null
+  );
+
+  assert.equal(result, 'stop here');
+});
+
+test('processSSEStream skips malformed JSON lines without throwing', async () => {
+  const chunks = [
+    'data: not-valid-json\n\n',
+    'data: {"choices":[{"delta":{"content":"good"}}]}\n\n',
+    'data: [DONE]\n\n',
+  ];
+
+  const result = await processSSEStream(
+    makeStreamResponse(chunks),
+    (data) => data?.choices?.[0]?.delta?.content || '',
+    () => {},
+    null
+  );
+
+  assert.equal(result, 'good');
+});
+
+test('processSSEStream throws when response is not ok', async () => {
+  const errorResponse = {
+    ok: false,
+    status: 429,
+    text: async () => 'Rate limited.',
+    body: null,
+  };
+
+  await assert.rejects(
+    () => processSSEStream(errorResponse, () => '', () => {}, null),
+    (err) => {
+      assert.ok(err.message.includes('Rate limited.') || err.message.includes('429'));
+      return true;
+    }
+  );
+});
+
+test('processSSEStream throws AbortError when signal is already aborted', async () => {
+  const controller = new AbortController();
+  controller.abort();
+
+  const chunks = ['data: {"choices":[{"delta":{"content":"x"}}]}\n\n'];
+
+  await assert.rejects(
+    () =>
+      processSSEStream(
+        makeStreamResponse(chunks),
+        (data) => data?.choices?.[0]?.delta?.content || '',
+        () => {},
+        controller.signal
+      ),
+    (err) => {
+      assert.equal(err.name, 'AbortError');
+      return true;
+    }
+  );
 });

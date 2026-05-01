@@ -1424,6 +1424,8 @@ if (typeof module !== 'undefined' && module.exports) {
     buildCustomPrompt,
     buildEnhancePrompt,
     buildGenerateActionsPrompt,
+    supportsGeneration,
+    processSSEStream,
     coerceTemperature,
     coerceMaxTokens,
     normalizeActionOverride,
