@@ -45,6 +45,7 @@
     apply: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
     stop: `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>`,
     add_context: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
+    create_action: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
     sparkle: `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0L14.59 8.41L23 11L14.59 13.59L12 22L9.41 13.59L1 11L9.41 8.41L12 0Z"/></svg>`,
     describe_image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`,
     extract_text: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/></svg>`,
@@ -128,6 +129,11 @@
     .ai-setup-chip:hover { background: #e2e8f0; }
     .ai-setup-chip:disabled { opacity: 0.5; cursor: not-allowed; }
     .ai-setup-loading { font-size: 12px; color: #64748b; display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+    .ai-quick-create-form { display: flex; flex-direction: column; gap: 5px; }
+    .ai-quick-create-input { all: unset; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px; font-size: 12px; font-family: inherit; color: #374151; background: #ffffff; box-sizing: border-box; width: 100%; }
+    .ai-quick-create-input:focus { border-color: #6366f1; outline: 2px solid rgba(99, 102, 241, 0.2); outline-offset: 0; }
+    .ai-quick-create-textarea { resize: vertical; min-height: 56px; line-height: 1.4; }
+    .ai-quick-create-input.error { border-color: #dc2626; }
 
     @media (prefers-color-scheme: dark) {
       .ai-menu { background: #1e1e2e; border-color: #313244; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.2); }
@@ -150,6 +156,8 @@
       .ai-setup-chip { background: #313244; color: #cdd6f4; }
       .ai-setup-chip:hover { background: #45475a; }
       .ai-setup-loading { color: #a6adc8; }
+      .ai-quick-create-input { background: #1e1e2e; border-color: #45475a; color: #cdd6f4; }
+      .ai-quick-create-input:focus { border-color: #a5b4fc; outline-color: rgba(165, 180, 252, 0.2); }
     }
   `;
   shadow.appendChild(styleEl);
@@ -421,7 +429,16 @@
     const chips = SETUP_CATEGORIES
       .map((c) => `<button class="ai-setup-chip" data-category="${escapeAttr(c.category)}">${escapeHtml(c.label)}</button>`)
       .join('');
-    return `<div class="ai-setup-title">✨ Create your first actions</div><div class="ai-setup-hint">Pick a category to generate 3 actions:</div><div class="ai-setup-chips">${chips}</div>`;
+    return `<div class="ai-setup-title">✨ Create your first actions</div><div class="ai-setup-hint">Pick a category to generate 3 actions:</div><div class="ai-setup-chips">${chips}<button class="ai-setup-chip" data-role="quick-create">✏️ Create manually</button></div>`;
+  }
+
+  function buildQuickCreateHtml() {
+    return `<div class="ai-setup-title">✏️ New action</div>`
+      + `<div class="ai-quick-create-form">`
+      + `<input class="ai-quick-create-input" type="text" placeholder="Action name…" data-qc="name" maxlength="50">`
+      + `<textarea class="ai-quick-create-input ai-quick-create-textarea" placeholder="Prompt… (use {{TEXT}} for the selected text)" data-qc="prompt" rows="3"></textarea>`
+      + `<div class="ai-setup-chips"><button class="ai-setup-chip" data-role="qc-save">Save</button><button class="ai-setup-chip" data-role="qc-cancel">Cancel</button></div>`
+      + `</div>`;
   }
 
   function buildMenuButtons() {
@@ -446,10 +463,11 @@
         menu.classList.remove('ai-menu--setup');
         const contextButtonTitle = getContextButtonTitle();
         const contextButton = `<button class="ai-menu-context-btn" data-role="add-context" title="${escapeAttr(contextButtonTitle)}" aria-label="${escapeAttr(contextButtonTitle)}" data-count="${escapeAttr(getContextButtonCountLabel())}">${ICONS.add_context}</button>`;
+        const createButton = `<button class="ai-menu-context-btn" data-role="quick-create" title="Create new action" aria-label="Create new action">${ICONS.create_action}</button>`;
         const actionButtons = visibleCustomActions.map((ca) =>
           `<button class="ai-menu-btn" data-action="${ca.id}"><span class="icon" style="font-style:normal;">${ca.icon || '✏️'}</span>${escapeHtml(ca.name)}</button>`
         ).join('<div class="ai-menu-separator"></div>');
-        html = `${contextButton}<div class="ai-menu-separator"></div>${actionButtons}`;
+        html = `${contextButton}${createButton}<div class="ai-menu-separator"></div>${actionButtons}`;
       } else {
         menu.classList.add('ai-menu--setup');
         html = buildSetupHtml();
@@ -1268,7 +1286,14 @@
   menu.addEventListener('click', (e) => {
     const contextButton = getClickedButton(e, '.ai-menu-context-btn');
     if (contextButton) {
-      addCurrentSelectionToContext();
+      const role = contextButton.dataset.role;
+      if (role === 'quick-create') {
+        menu.classList.add('ai-menu--setup');
+        menu.innerHTML = buildQuickCreateHtml();
+        menu.querySelector('[data-qc="name"]')?.focus();
+      } else {
+        addCurrentSelectionToContext();
+      }
       return;
     }
 
@@ -1290,6 +1315,40 @@
         hideMenu();
       } else if (role === 'rebuild-setup') {
         menu.innerHTML = buildSetupHtml();
+      } else if (role === 'quick-create') {
+        menu.classList.add('ai-menu--setup');
+        menu.innerHTML = buildQuickCreateHtml();
+        menu.querySelector('[data-qc="name"]')?.focus();
+      } else if (role === 'qc-cancel') {
+        buildMenuButtons();
+      } else if (role === 'qc-save') {
+        const nameInput = menu.querySelector('[data-qc="name"]');
+        const promptInput = menu.querySelector('[data-qc="prompt"]');
+        const name = nameInput?.value.trim() || '';
+        const prompt = promptInput?.value.trim() || '';
+        if (!name) {
+          nameInput?.classList.add('error');
+          nameInput?.focus();
+          return;
+        }
+        if (!prompt) {
+          promptInput?.classList.add('error');
+          promptInput?.focus();
+          return;
+        }
+        const newAction = {
+          id: 'custom_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7),
+          name,
+          icon: '✏️',
+          prompt,
+          overrides: {},
+          hidden: false,
+        };
+        chrome.storage.local.get('customActions', ({ customActions: existing }) => {
+          chrome.storage.local.set({ customActions: [...(existing || []), newAction] });
+          // The storage onChanged listener will rebuild the menu automatically.
+        });
+        hideMenu();
       }
     }
   });
