@@ -886,9 +886,9 @@
     clearImageSelection();
     buildMenuButtons();
 
-    // While loading or results are on screen, only close the floating menu.
-    // Never wipe the results panel or cancel the stream from a background event.
-    if (isLoading || results.classList.contains('visible')) {
+    // While a stream is loading, only close the floating menu so we don't
+    // cancel the active request from a background event.
+    if (isLoading) {
       hideMenu();
       return;
     }
@@ -1356,17 +1356,10 @@
     // Never close via mousedown while a request is loading.
     if (isLoading) return;
 
-    // Clicking anywhere outside should immediately dismiss action buttons.
-    // If the user keeps a valid selection, mouseup/selectionchange can re-open it.
-    hideMenu();
-
-    if (results.classList.contains('visible') || menu.classList.contains('visible')) {
-      setTimeout(() => {
-        if (!hasActiveSelectionText()) {
-          clearSelectionUi();
-        }
-      }, 150);
-    }
+    // Clicking anywhere outside closes the entire UI.
+    // suppressUiUntil prevents mouseup from immediately re-opening the menu
+    // for the same click, while still allowing new selections afterwards.
+    hideAll();
   });
 
   document.addEventListener('keydown', (e) => {
@@ -1409,12 +1402,14 @@
   function handleFocusLoss() {
     suppressUiUntil = Date.now() + 250;
     selectedText = '';
-    hideMenu();
 
-    // Keep active streams/results alive across focus changes so responses can finish.
-    if (!isLoading && !results.classList.contains('visible')) {
-      hideAll();
+    // Keep the stream alive while loading, but close everything else.
+    if (isLoading) {
+      hideMenu();
+      return;
     }
+
+    hideAll();
   }
 
   window.addEventListener('blur', () => {
@@ -1447,7 +1442,7 @@
 
       hideMenuWhenSelectionMissing();
 
-      if (!hasActiveSelectionText() && !results.classList.contains('visible')) {
+      if (!hasActiveSelectionText()) {
         clearSelectionUi();
       }
     }, 250);
