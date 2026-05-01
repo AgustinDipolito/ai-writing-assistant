@@ -1547,7 +1547,7 @@ test('openaiAdapter.call uses vision-capable model when imageData is provided', 
   const imageData = 'data:image/jpeg;base64,/9j/abc';
   await openaiAdapter.call('describe', 'key', { model: 'gpt-3.5-turbo' }, imageData);
   // gpt-3.5-turbo is not vision-capable; should fall back to gpt-4o-mini
-  assert.ok(openaiAdapter.visionModels.has(capturedBody.model));
+  assert.equal(capturedBody.model, 'gpt-4o-mini');
   const userMsg = capturedBody.messages.find((m) => m.role === 'user');
   assert.ok(Array.isArray(userMsg.content));
   assert.equal(userMsg.content[0].type, 'image_url');
@@ -1705,6 +1705,8 @@ test('supportsGeneration returns false when supportedGenerationMethods is absent
 // processSSEStream
 // ============================================================
 
+// Creates a minimal mock fetch response whose body is a ReadableStream
+// that yields the given SSE text chunks one-by-one, simulating a streaming API response.
 function makeStreamResponse(chunks) {
   const encoder = new TextEncoder();
   let index = 0;
