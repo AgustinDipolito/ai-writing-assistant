@@ -891,10 +891,12 @@
 
   function hideMenu() {
     menu.classList.remove('visible');
+    menu.style.display = '';
   }
 
   function hideResults() {
     results.classList.remove('visible');
+    results.style.display = '';
     resultsBody.innerHTML = '';
     updateApplyButtonState();
   }
