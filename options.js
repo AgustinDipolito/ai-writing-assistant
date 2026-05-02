@@ -106,24 +106,7 @@ const configStatusEl     = document.getElementById('configStatus');
 const configAutoSave     = document.getElementById('configAutoSave');
 const footerProvider     = document.getElementById('footerProvider');
 const footerModel        = document.getElementById('footerModel');
-const ACTION_IDS         = ['grammar', 'style', 'synonyms'];
-const baseOverrideInputs = {
-  grammar: {
-    model: document.getElementById('overrideModel-grammar'),
-    temperature: document.getElementById('overrideTemp-grammar'),
-    maxTokens: document.getElementById('overrideTokens-grammar'),
-  },
-  style: {
-    model: document.getElementById('overrideModel-style'),
-    temperature: document.getElementById('overrideTemp-style'),
-    maxTokens: document.getElementById('overrideTokens-style'),
-  },
-  synonyms: {
-    model: document.getElementById('overrideModel-synonyms'),
-    temperature: document.getElementById('overrideTemp-synonyms'),
-    maxTokens: document.getElementById('overrideTokens-synonyms'),
-  },
-};
+
 
 // ============================================================
 // 3. STATUS HELPER
@@ -146,7 +129,6 @@ function switchProviderPanel(providerId) {
     providerPanels[id].style.display = id === providerId ? '' : 'none';
   });
   populateModelSelect(providerId);
-  populateBaseOverrideModelSelects(providerId);
   renderActionCards();
   updateFooter(providerId);
 }
@@ -176,15 +158,6 @@ function buildModelOptions(providerId, selectedModel, includeGlobalOption = fals
     .join('');
 
   return head + options;
-}
-
-function populateBaseOverrideModelSelects(providerId) {
-  ACTION_IDS.forEach((actionId) => {
-    const select = baseOverrideInputs[actionId]?.model;
-    if (!select) return;
-    const currentValue = select.value || '';
-    select.innerHTML = buildModelOptions(providerId, currentValue, true);
-  });
 }
 
 providerSelect.addEventListener('change', () => {
@@ -394,44 +367,6 @@ function parseOptionalNumber(value, min, max) {
   return Math.min(max, Math.max(min, numeric));
 }
 
-function gatherBaseActionOverrides() {
-  const overrides = {};
-
-  ACTION_IDS.forEach((actionId) => {
-    const actionInputs = baseOverrideInputs[actionId];
-    if (!actionInputs) return;
-
-    const actionOverride = {};
-    const model = actionInputs.model?.value?.trim();
-    const temperature = parseOptionalNumber(actionInputs.temperature?.value, 0, 1);
-    const maxTokens = parseOptionalNumber(actionInputs.maxTokens?.value, 100, 8000);
-
-    if (model) actionOverride.model = model;
-    if (typeof temperature === 'number') actionOverride.temperature = Number(temperature.toFixed(2));
-    if (typeof maxTokens === 'number') actionOverride.maxTokens = Math.round(maxTokens);
-
-    if (Object.keys(actionOverride).length > 0) {
-      overrides[actionId] = actionOverride;
-    }
-  });
-
-  return overrides;
-}
-
-function setBaseActionOverridesInForm(providerId, actionOverrides = {}) {
-  populateBaseOverrideModelSelects(providerId);
-
-  ACTION_IDS.forEach((actionId) => {
-    const actionInputs = baseOverrideInputs[actionId];
-    const override = actionOverrides[actionId] || {};
-    if (!actionInputs) return;
-
-    actionInputs.model.value = override.model || '';
-    actionInputs.temperature.value = override.temperature ?? '';
-    actionInputs.maxTokens.value = override.maxTokens ?? '';
-  });
-}
-
 function gatherSharedConfig() {
   return {
     model: modelSelect.value,
@@ -442,7 +377,6 @@ function gatherSharedConfig() {
     promptStyle: promptStyle.value.trim(),
     promptSynonyms: promptSynonyms.value.trim(),
     systemInstruction: systemInstruction.value.trim(),
-    actionOverrides: gatherBaseActionOverrides(),
   };
 }
 
@@ -493,13 +427,7 @@ systemInstruction.addEventListener('input', autoSaveConfig);
 if (ollamaBaseUrlInput) {
   ollamaBaseUrlInput.addEventListener('input', autoSaveConfig);
 }
-ACTION_IDS.forEach((actionId) => {
-  const inputs = baseOverrideInputs[actionId];
-  if (!inputs) return;
-  inputs.model.addEventListener('change', autoSaveConfig);
-  inputs.temperature.addEventListener('input', autoSaveConfig);
-  inputs.maxTokens.addEventListener('input', autoSaveConfig);
-});
+
 
 // ============================================================
 // 9. COLLAPSIBLE TEXTAREAS
@@ -552,7 +480,7 @@ chrome.storage.local.get('providerConfig', ({ providerConfig }) => {
   promptStyle.value = cfg.promptStyle || '';
   promptSynonyms.value = cfg.promptSynonyms || '';
   systemInstruction.value = cfg.systemInstruction || '';
-  setBaseActionOverridesInForm(providerId, cfg.actionOverrides || {});
+
 
   updateFooter(providerId, cfg.model);
   expandCollapsibleIfFilled();
@@ -577,7 +505,6 @@ resetConfigBtn.addEventListener('click', () => {
   promptStyle.value = '';
   promptSynonyms.value = '';
   systemInstruction.value = '';
-  setBaseActionOverridesInForm(providerId, {});
   expandCollapsibleIfFilled();
 
   const resetCfg = {
@@ -589,7 +516,7 @@ resetConfigBtn.addEventListener('click', () => {
     const pc = providerConfig || { activeProvider: providerId };
     if (!pc[providerId]) pc[providerId] = {};
     const savedKey = pc[providerId].apiKey;
-    pc[providerId] = { ...resetCfg, apiKey: savedKey, actionOverrides: {} };
+    pc[providerId] = { ...resetCfg, apiKey: savedKey };
     chrome.storage.local.set({ providerConfig: pc }, () => {
       updateFooter(providerId, provider.defaultModel);
       showStatus('success', 'Reset to defaults!', configStatusEl);
