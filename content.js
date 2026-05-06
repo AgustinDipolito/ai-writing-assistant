@@ -11,6 +11,9 @@
   window.__aiWritingAssistantLoaded = true;
 
   const MAX_TEXT_LENGTH = 5000;
+  const MAX_PAGE_CONTEXT_TEXT_LENGTH = 4000;
+  const MAX_PAGE_CONTEXT_TITLE_LENGTH = 240;
+  const MAX_PAGE_CONTEXT_URL_LENGTH = 2000;
   const MAX_CONTEXT_BADGE_COUNT = 9;
   const MENU_OFFSET = 10;
   const STREAM_PORT_NAME = 'ai_stream';
@@ -869,6 +872,16 @@
     return { text: '', rect: null };
   }
 
+  function buildPageContextPayload() {
+    const title = SelectionUtils.clampText(document.title || '', MAX_PAGE_CONTEXT_TITLE_LENGTH);
+    const url = SelectionUtils.clampText(window.location.href || '', MAX_PAGE_CONTEXT_URL_LENGTH);
+    const visibleText = SelectionUtils.clampText(document.body?.innerText || '', MAX_PAGE_CONTEXT_TEXT_LENGTH);
+
+    if (!title && !url && !visibleText) return null;
+
+    return { title, url, visibleText };
+  }
+
   function hasActiveSelectionText() {
     return getSelectionPayload().text.length > 1;
   }
@@ -1219,6 +1232,7 @@
       const requestId = generateRequestId();
       activeRequestId = requestId;
       const imageData = selectedImage || undefined;
+      const pageContext = buildPageContextPayload() || undefined;
       console.log('[AWA] sending AI_STREAM_START', requestId, action, 'text len', text.length, 'has image', Boolean(imageData));
       port.postMessage({
         type: 'AI_STREAM_START',
@@ -1226,6 +1240,7 @@
         action,
         text,
         imageData,
+        pageContext,
       });
     } catch (err) {
       showError('Extension error: ' + (err.message || 'Unknown error'));
