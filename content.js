@@ -598,6 +598,10 @@
     return escapeHtml(text).replace(/"/g, '&quot;');
   }
 
+  function sanitizeUserInput(rawText) {
+    return String(rawText || '').trim().slice(0, MAX_TEXT_LENGTH);
+  }
+
   function setSidebarOpen(open) {
     if (open) {
       chatSidebar.classList.add('visible');
@@ -637,7 +641,7 @@
   }
 
   async function sendSidebarChatMessage() {
-    const text = String(chatInput.value || '').trim().slice(0, MAX_TEXT_LENGTH);
+    const text = sanitizeUserInput(chatInput.value);
     if (!text || chatSendBtn.disabled) return;
 
     chatInput.value = '';
@@ -661,7 +665,7 @@
 
       appendChatMessage('assistant', response.result || 'No response received.');
     } catch (err) {
-      appendChatMessage('assistant', `⚠️ ${err.message || 'An unexpected error occurred.'}`);
+      appendChatMessage('assistant', `⚠️ ${err.message || 'Unable to send message. Please check your API settings in extension options.'}`);
     } finally {
       setChatLoading(false);
       chatInput.focus();
