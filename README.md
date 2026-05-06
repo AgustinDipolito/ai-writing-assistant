@@ -24,7 +24,7 @@ No backend, no data collection. Every API call goes directly from your browser t
 - Light and dark themes follow the system `prefers-color-scheme`.
 - All configuration stored locally with `chrome.storage.local`.
 
-### Examples Built-in actions
+### Examples actions
 
 | Action         | What it does                                                                              |
 |----------------|-------------------------------------------------------------------------------------------|
@@ -96,11 +96,6 @@ All settings are available in the Options page.
 | Max tokens         | Maximum length of the response.                                             |
 | Response language  | Force a specific output language, or auto-detect from the input text.       |
 | System instruction | A global instruction prepended to every request.                            |
-| Action prompts     | Override the default prompt for Grammar, Style, or Synonyms individually.  |
-
-### Per-action overrides
-
-Each built-in action (Grammar, Style, Synonyms) can override the model, temperature, and max tokens independently of the global setting. Custom actions support the same overrides.
 
 ### Custom actions
 
@@ -182,7 +177,7 @@ Configuration is stored under the key `providerConfig` in `chrome.storage.local`
   activeProvider: 'gemini' | 'openai',
   gemini: {
     apiKey, model, temperature, maxTokens,
-    responseLanguage, promptGrammar, promptStyle, promptSynonyms,
+    responseLanguage,
     systemInstruction,
     actionOverrides: {
       grammar:  { model, temperature, maxTokens },
