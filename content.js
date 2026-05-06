@@ -422,7 +422,14 @@
     { category: 'Code & Tech', label: '💻 Code' },
     { category: 'Academic & Research', label: '🎓 Academic' },
     { category: 'Marketing & Sales', label: '🛍️ Marketing' },
+    { category: 'HR & Recruiting', label: '👥 HR' },
     { category: 'Customer Service', label: '🤝 Support' },
+    { category: 'Legal & Compliance', label: '⚖️ Legal' },
+    { category: 'Research & Analysis', label: '🔍 Research' },
+    { category: 'Finance & Data', label: '💰 Finance' },
+    { category: 'Creative Writing', label: '🎨 Creative' },
+    { category: 'Translation & Language', label: '🌍 Translation' },
+    { category: 'Health & Wellness', label: '🏥 Health' },
   ];
 
   function buildSetupHtml() {
