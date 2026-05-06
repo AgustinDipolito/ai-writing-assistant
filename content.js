@@ -902,9 +902,18 @@
     return excerpt.trim();
   }
 
+  function getSafePageUrl(maxLength) {
+    try {
+      const currentUrl = new URL(window.location.href);
+      return SelectionUtils.clampText(`${currentUrl.origin}${currentUrl.pathname}` || '', maxLength);
+    } catch {
+      return '';
+    }
+  }
+
   function buildPageContextPayload() {
     const title = SelectionUtils.clampText(document.title || '', MAX_PAGE_CONTEXT_TITLE_LENGTH);
-    const url = SelectionUtils.clampText(window.location.href || '', MAX_PAGE_CONTEXT_URL_LENGTH);
+    const url = getSafePageUrl(MAX_PAGE_CONTEXT_URL_LENGTH);
     const visibleText = collectPageTextExcerpt(MAX_PAGE_CONTEXT_TEXT_LENGTH);
 
     if (!title && !url && !visibleText) return null;
