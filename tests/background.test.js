@@ -38,6 +38,7 @@ const {
   BASE_ACTIONS,
   buildPrompt,
   buildCustomPrompt,
+  injectPageContext,
   buildEnhancePrompt,
   buildGenerateActionsPrompt,
   supportsGeneration,
@@ -155,6 +156,29 @@ test('buildCustomPrompt appends text block when {{TEXT}} is absent', () => {
 test('buildCustomPrompt includes language instruction', () => {
   const prompt = buildCustomPrompt('Fix: {{TEXT}}', 'text', { responseLanguage: 'fr' });
   assert.ok(prompt.includes(LANGUAGE_INSTRUCTIONS.fr));
+});
+
+// ============================================================
+// injectPageContext
+// ============================================================
+
+test('injectPageContext appends page title, URL, and visible text when provided', () => {
+  const prompt = injectPageContext('Base prompt', {
+    title: 'Example Page',
+    url: 'https://example.com/docs',
+    visibleText: 'Visible content on the page.',
+  });
+
+  assert.ok(prompt.includes('Base prompt'));
+  assert.ok(prompt.includes('Page title: Example Page'));
+  assert.ok(prompt.includes('Page URL: https://example.com/docs'));
+  assert.ok(prompt.includes('Visible page text excerpt:'));
+  assert.ok(prompt.includes('Visible content on the page.'));
+});
+
+test('injectPageContext returns original prompt when context is empty', () => {
+  const prompt = injectPageContext('Base prompt', {});
+  assert.equal(prompt, 'Base prompt');
 });
 
 // ============================================================

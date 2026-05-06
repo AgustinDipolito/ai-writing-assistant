@@ -11,6 +11,9 @@
   window.__aiWritingAssistantLoaded = true;
 
   const MAX_TEXT_LENGTH = 5000;
+  const MAX_PAGE_CONTEXT_TEXT_LENGTH = 4000;
+  const MAX_PAGE_CONTEXT_TITLE_LENGTH = 240;
+  const MAX_PAGE_CONTEXT_URL_LENGTH = 2000;
   const MAX_CONTEXT_BADGE_COUNT = 9;
   const MENU_OFFSET = 10;
   const STREAM_PORT_NAME = 'ai_stream';
@@ -1047,6 +1050,55 @@
     return { text: '', rect: null };
   }
 
+  function collectPageTextExcerpt(maxLength) {
+    const limit = Number.isInteger(maxLength) && maxLength > 0 ? maxLength : MAX_PAGE_CONTEXT_TEXT_LENGTH;
+    const root = document.querySelector('main, article, [role="main"]') || document.body;
+    if (!root) return '';
+
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const parent = node?.parentElement;
+        if (!parent) return NodeFilter.FILTER_REJECT;
+        if (/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/i.test(parent.tagName)) return NodeFilter.FILTER_REJECT;
+        if (!String(node.nodeValue || '').trim()) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+
+    let excerpt = '';
+    while (walker.nextNode() && excerpt.length < limit) {
+      const chunk = String(walker.currentNode.nodeValue || '').replace(/\s+/g, ' ').trim();
+      if (!chunk) continue;
+
+      const prefix = excerpt ? ' ' : '';
+      const remaining = limit - excerpt.length - prefix.length;
+      if (remaining <= 0) break;
+
+      excerpt += prefix + (chunk.length > remaining ? chunk.slice(0, remaining) : chunk);
+    }
+
+    return excerpt.trim();
+  }
+
+  function getSafePageUrl(maxLength) {
+    try {
+      const currentUrl = new URL(window.location.href);
+      return SelectionUtils.clampText(`${currentUrl.origin}${currentUrl.pathname}` || '', maxLength);
+    } catch {
+      return '';
+    }
+  }
+
+  function buildPageContextPayload() {
+    const title = SelectionUtils.clampText(document.title || '', MAX_PAGE_CONTEXT_TITLE_LENGTH);
+    const url = getSafePageUrl(MAX_PAGE_CONTEXT_URL_LENGTH);
+    const visibleText = collectPageTextExcerpt(MAX_PAGE_CONTEXT_TEXT_LENGTH);
+
+    if (!title && !url && !visibleText) return null;
+
+    return { title, url, visibleText };
+  }
+
   function hasActiveSelectionText() {
     return getSelectionPayload().text.length > 1;
   }
@@ -1397,6 +1449,10 @@
       const requestId = generateRequestId();
       activeRequestId = requestId;
       const imageData = selectedImage || undefined;
+      const shouldIncludePageContext = action !== 'generate_image';
+      const pageContext = shouldIncludePageContext
+        ? (buildPageContextPayload() || undefined)
+        : undefined;
       console.log('[AWA] sending AI_STREAM_START', requestId, action, 'text len', text.length, 'has image', Boolean(imageData));
       port.postMessage({
         type: 'AI_STREAM_START',
@@ -1404,6 +1460,7 @@
         action,
         text,
         imageData,
+        pageContext,
       });
     } catch (err) {
       showError('Extension error: ' + (err.message || 'Unknown error'));
