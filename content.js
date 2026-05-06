@@ -149,6 +149,7 @@
     .ai-chat-composer { border-top: 1px solid #f1f5f9; padding: 8px; display: flex; gap: 6px; align-items: flex-end; }
     .ai-chat-input { all: unset; flex: 1; min-height: 34px; max-height: 90px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 7px 8px; font-size: 12.8px; color: #334155; background: #ffffff; line-height: 1.4; }
     .ai-chat-input:focus { border-color: #6366f1; outline: 2px solid rgba(99, 102, 241, 0.2); outline-offset: 0; }
+    .ai-chat-input:disabled { opacity: 0.7; cursor: not-allowed; background: #f8fafc; }
     .ai-chat-send { all: unset; height: 34px; min-width: 34px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; padding: 0 10px; background: #6366f1; color: #ffffff; font-size: 12px; font-weight: 600; cursor: pointer; transition: background 0.15s; }
     .ai-chat-send:hover { background: #4f46e5; }
     .ai-chat-send:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
@@ -188,6 +189,7 @@
       .ai-chat-message--assistant code { background: #313244; color: #a5b4fc; }
       .ai-chat-input { background: #1e1e2e; border-color: #45475a; color: #cdd6f4; }
       .ai-chat-input:focus { border-color: #a5b4fc; outline-color: rgba(165, 180, 252, 0.2); }
+      .ai-chat-input:disabled { background: #181825; color: #94a3b8; }
       .ai-chat-send { background: #818cf8; color: #0f172a; }
       .ai-chat-send:hover { background: #6366f1; color: #ffffff; }
       .ai-chat-hint { color: #a6adc8; }
@@ -234,8 +236,8 @@
       <div class="ai-chat-hint">Ask anything while you browse.</div>
     </div>
     <div class="ai-chat-composer">
-      <textarea class="ai-chat-input" placeholder="Type a message…" rows="1"></textarea>
-      <button class="ai-chat-send" type="button">Send</button>
+      <textarea class="ai-chat-input" placeholder="Type a message…" rows="1" aria-label="Chat message"></textarea>
+      <button class="ai-chat-send" type="button" aria-label="Send message">Send</button>
     </div>
   `;
 
