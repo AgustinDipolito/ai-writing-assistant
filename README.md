@@ -258,12 +258,12 @@ The roadmap is organized around a single goal: **make LLMs and AI agents accessi
 | **Custom actions** | User-defined prompt library with per-action model and parameter overrides. |
 | **Image generation** | Create images from selected text as a prompt (Gemini). |
 | **Image analysis** | Describe, extract text from, or fully analyze any image on any page. |
+| **Sidebar chat panel** | Minimized-by-default floating chat panel for freeform AI conversations while browsing. |
 
 ### Phase 1 — Foundation for Scale
 
 | Feature | Description |
 |---|---|
-| **Sidebar chat** | Persistent side panel for freeform conversation with any model while browsing. Page content is available as context automatically. |
 | **Page-aware context** | Inject the visible page (or a selection of it) into every prompt so the LLM understands what the user is looking at — summaries, Q&A, and data extraction become one-click actions. |
 | **Session history** | In-panel drawer to revisit recent results and conversations within a browser session. |
 | **Keyboard shortcuts** | Trigger any action via configurable hotkeys. |

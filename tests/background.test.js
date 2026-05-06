@@ -84,6 +84,11 @@ test('buildPrompt includes selected text in synonyms prompt', () => {
   assert.ok(prompt.includes('happy dog'));
 });
 
+test('buildPrompt includes selected text in chat prompt', () => {
+  const prompt = buildPrompt('chat', 'Summarize this section.', {});
+  assert.ok(prompt.includes('Summarize this section.'));
+});
+
 test('buildPrompt uses specified responseLanguage', () => {
   const prompt = buildPrompt('grammar', 'Hola.', { responseLanguage: 'es' });
   assert.ok(prompt.includes(LANGUAGE_INSTRUCTIONS.es));
@@ -437,6 +442,11 @@ test('IMAGE_ANALYSIS_ACTIONS contains the three image analysis actions', () => {
 test('BASE_ACTIONS includes generate_image', () => {
   const ids = BASE_ACTIONS.map((a) => a.id);
   assert.ok(ids.includes('generate_image'), 'generate_image should be in BASE_ACTIONS');
+});
+
+test('BASE_ACTIONS includes chat', () => {
+  const ids = BASE_ACTIONS.map((a) => a.id);
+  assert.ok(ids.includes('chat'), 'chat should be in BASE_ACTIONS');
 });
 
 // ============================================================
