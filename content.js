@@ -609,7 +609,9 @@
 
   function setSidebarOpen(open) {
     if (open) {
-      chatPreviousFocus = shadow.activeElement || document.activeElement || null;
+      // Only capture focus if it's within the shadow DOM; otherwise fall back to the toggle.
+      const active = shadow.activeElement;
+      chatPreviousFocus = (active && active !== chatToggle) ? active : null;
       chatSidebar.classList.add('visible');
       chatToggle.setAttribute('aria-expanded', 'true');
       chatInput.focus();
@@ -617,7 +619,7 @@
     }
     chatSidebar.classList.remove('visible');
     chatToggle.setAttribute('aria-expanded', 'false');
-    // Return focus to the element that was active before the sidebar opened.
+    // Return focus to the previously focused shadow element, or the toggle as a safe fallback.
     try {
       if (chatPreviousFocus && typeof chatPreviousFocus.focus === 'function') {
         chatPreviousFocus.focus();
@@ -636,9 +638,11 @@
 
   function appendChatMessage(role, text) {
     const safeRole = role === 'assistant' ? 'assistant' : 'user';
-    // Hide the introductory hint once the first message appears.
+    // Hide the introductory hint once the first message appears and remove the
+    // aria-describedby reference so screen readers are not pointed at hidden text.
     if (chatHint && chatHint.parentNode) {
-      chatHint.remove();
+      chatHint.hidden = true;
+      chatInput.removeAttribute('aria-describedby');
     }
     const msg = document.createElement('div');
     msg.className = `ai-chat-message ai-chat-message--${safeRole}`;
