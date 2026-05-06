@@ -1271,7 +1271,10 @@
       const requestId = generateRequestId();
       activeRequestId = requestId;
       const imageData = selectedImage || undefined;
-      const pageContext = buildPageContextPayload() || undefined;
+      const shouldIncludePageContext = action !== 'generate_image';
+      const pageContext = shouldIncludePageContext
+        ? (buildPageContextPayload() || undefined)
+        : undefined;
       console.log('[AWA] sending AI_STREAM_START', requestId, action, 'text len', text.length, 'has image', Boolean(imageData));
       port.postMessage({
         type: 'AI_STREAM_START',
