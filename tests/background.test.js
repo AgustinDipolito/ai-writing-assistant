@@ -84,6 +84,11 @@ test('buildPrompt includes selected text in synonyms prompt', () => {
   assert.ok(prompt.includes('happy dog'));
 });
 
+test('buildPrompt includes selected text in chat prompt', () => {
+  const prompt = buildPrompt('chat', 'Summarize this section.', {});
+  assert.ok(prompt.includes('Summarize this section.'));
+});
+
 test('buildPrompt uses specified responseLanguage', () => {
   const prompt = buildPrompt('grammar', 'Hola.', { responseLanguage: 'es' });
   assert.ok(prompt.includes(LANGUAGE_INSTRUCTIONS.es));
