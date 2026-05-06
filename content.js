@@ -137,6 +137,27 @@
     .ai-quick-create-input:focus { border-color: #6366f1; outline: 2px solid rgba(99, 102, 241, 0.2); outline-offset: 0; }
     .ai-quick-create-textarea { resize: vertical; min-height: 56px; line-height: 1.4; }
     .ai-quick-create-input.error { border-color: #dc2626; }
+    .ai-chat-toggle { all: unset; position: fixed; right: 16px; bottom: 16px; width: 44px; height: 44px; border-radius: 999px; display: flex; align-items: center; justify-content: center; background: #6366f1; color: #ffffff; box-shadow: 0 8px 24px rgba(99, 102, 241, 0.38); cursor: pointer; pointer-events: auto; z-index: 2147483647; transition: transform 0.15s, opacity 0.15s, background 0.15s; font-size: 19px; }
+    .ai-chat-toggle:hover { transform: translateY(-1px); background: #4f46e5; }
+    .ai-chat-toggle[aria-expanded="true"] { opacity: 0; pointer-events: none; transform: scale(0.95); }
+    .ai-chat-sidebar { all: initial; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; position: fixed; right: 16px; bottom: 68px; width: 320px; max-width: calc(100vw - 24px); height: 420px; max-height: calc(100vh - 28px); border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08); display: none; flex-direction: column; overflow: hidden; pointer-events: auto; z-index: 2147483647; }
+    .ai-chat-sidebar.visible { display: flex; animation: aiPanelSlideIn 0.2s ease-out; }
+    .ai-chat-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
+    .ai-chat-title { font-size: 13px; font-weight: 600; color: #0f172a; }
+    .ai-chat-messages { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: #f8fafc; }
+    .ai-chat-message { max-width: 92%; padding: 8px 10px; border-radius: 10px; font-size: 12.8px; line-height: 1.5; word-break: break-word; }
+    .ai-chat-message--user { align-self: flex-end; background: #6366f1; color: #ffffff; border-bottom-right-radius: 5px; }
+    .ai-chat-message--assistant { align-self: flex-start; background: #ffffff; color: #1e293b; border: 1px solid #e2e8f0; border-bottom-left-radius: 5px; }
+    .ai-chat-message--assistant code { font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace; font-size: 12px; background: #f1f5f9; padding: 1px 4px; border-radius: 4px; }
+    .ai-chat-composer { border-top: 1px solid #f1f5f9; padding: 8px; display: flex; gap: 6px; align-items: flex-end; }
+    .ai-chat-input { all: unset; flex: 1; min-height: 34px; max-height: 90px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 7px 8px; font-size: 12.8px; color: #334155; background: #ffffff; line-height: 1.4; }
+    .ai-chat-input:focus { border-color: #6366f1; outline: 2px solid rgba(99, 102, 241, 0.2); outline-offset: 0; }
+    .ai-chat-input:disabled { opacity: 0.7; cursor: not-allowed; background: #f8fafc; }
+    .ai-chat-send { all: unset; height: 34px; min-width: 34px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; padding: 0 10px; background: #6366f1; color: #ffffff; font-size: 12px; font-weight: 600; cursor: pointer; transition: background 0.15s; }
+    .ai-chat-send:hover { background: #4f46e5; }
+    .ai-chat-send:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
+    .ai-chat-hint { font-size: 11.5px; color: #64748b; text-align: center; padding: 5px; }
+    .ai-chat-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; pointer-events: none; }
 
     @media (prefers-color-scheme: dark) {
       .ai-menu { background: #1e1e2e; border-color: #313244; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.2); }
@@ -161,6 +182,21 @@
       .ai-setup-loading { color: #a6adc8; }
       .ai-quick-create-input { background: #1e1e2e; border-color: #45475a; color: #cdd6f4; }
       .ai-quick-create-input:focus { border-color: #a5b4fc; outline-color: rgba(165, 180, 252, 0.2); }
+      .ai-chat-toggle { background: #818cf8; box-shadow: 0 8px 24px rgba(129, 140, 248, 0.34); }
+      .ai-chat-toggle:hover { background: #6366f1; }
+      .ai-chat-sidebar { background: #1e1e2e; border-color: #313244; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.24); }
+      .ai-chat-header, .ai-chat-composer { border-color: #313244; }
+      .ai-chat-title { color: #e2e8f0; }
+      .ai-chat-messages { background: #181825; }
+      .ai-chat-message--user { background: #818cf8; color: #0f172a; }
+      .ai-chat-message--assistant { background: #1e1e2e; color: #cdd6f4; border-color: #313244; }
+      .ai-chat-message--assistant code { background: #313244; color: #a5b4fc; }
+      .ai-chat-input { background: #1e1e2e; border-color: #45475a; color: #cdd6f4; }
+      .ai-chat-input:focus { border-color: #a5b4fc; outline-color: rgba(165, 180, 252, 0.2); }
+      .ai-chat-input:disabled { background: #181825; color: #94a3b8; }
+      .ai-chat-send { background: #818cf8; color: #0f172a; }
+      .ai-chat-send:hover { background: #6366f1; color: #ffffff; }
+      .ai-chat-hint { color: #a6adc8; }
     }
   `;
   shadow.appendChild(styleEl);
@@ -186,8 +222,34 @@
     <div class="ai-results-body"></div>
   `;
 
+  const chatToggle = document.createElement('button');
+  chatToggle.className = 'ai-chat-toggle';
+  chatToggle.title = 'Open sidebar chat';
+  chatToggle.setAttribute('aria-label', 'Open sidebar chat');
+  chatToggle.setAttribute('aria-expanded', 'false');
+  chatToggle.textContent = '💬';
+
+  const chatSidebar = document.createElement('div');
+  chatSidebar.className = 'ai-chat-sidebar';
+  chatSidebar.innerHTML = `
+    <div class="ai-chat-header">
+      <div class="ai-chat-title">Sidebar Chat</div>
+      <button class="ai-icon-btn" data-role="chat-minimize" title="Minimize">${ICONS.close}</button>
+    </div>
+    <div class="ai-chat-messages" role="log" aria-live="polite" aria-relevant="additions text">
+      <div class="ai-chat-hint" id="ai-chat-hint-text">Ask anything while you browse.</div>
+    </div>
+    <div class="ai-chat-composer">
+      <textarea class="ai-chat-input" placeholder="Type a message…" rows="1" aria-label="Chat message" aria-describedby="ai-chat-hint-text"></textarea>
+      <button class="ai-chat-send" type="button" aria-label="Send message">Send</button>
+    </div>
+    <div class="ai-chat-sr-only" aria-live="assertive" aria-atomic="true" id="ai-chat-sr-status"></div>
+  `;
+
   shadow.appendChild(menu);
   shadow.appendChild(results);
+  shadow.appendChild(chatToggle);
+  shadow.appendChild(chatSidebar);
 
   const resultsBody = results.querySelector('.ai-results-body');
   const resultsTitleText = results.querySelector('.ai-results-title-text');
@@ -196,6 +258,13 @@
   const applyBtn = results.querySelector('[data-role="apply"]');
   const downloadBtn = results.querySelector('[data-role="download"]');
   const closeBtn = results.querySelector('[data-role="close"]');
+  const chatMessages = chatSidebar.querySelector('.ai-chat-messages');
+  const chatInput = chatSidebar.querySelector('.ai-chat-input');
+  const chatSendBtn = chatSidebar.querySelector('.ai-chat-send');
+  const chatMinimizeBtn = chatSidebar.querySelector('[data-role="chat-minimize"]');
+  const chatHint = chatSidebar.querySelector('.ai-chat-hint');
+  const chatSrStatus = chatSidebar.querySelector('#ai-chat-sr-status');
+  let chatPreviousFocus = null;
 
   let loadedCustomActions = [];
   let selectedText = '';
@@ -425,7 +494,14 @@
     { category: 'Code & Tech', label: '💻 Code' },
     { category: 'Academic & Research', label: '🎓 Academic' },
     { category: 'Marketing & Sales', label: '🛍️ Marketing' },
+    { category: 'HR & Recruiting', label: '👥 HR' },
     { category: 'Customer Service', label: '🤝 Support' },
+    { category: 'Legal & Compliance', label: '⚖️ Legal' },
+    { category: 'Research & Analysis', label: '🔍 Research' },
+    { category: 'Finance & Data', label: '💰 Finance' },
+    { category: 'Creative Writing', label: '🎨 Creative' },
+    { category: 'Translation & Language', label: '🌍 Translation' },
+    { category: 'Health & Wellness', label: '🏥 Health' },
   ];
 
   function buildSetupHtml() {
@@ -535,6 +611,108 @@
 
   function escapeAttr(text) {
     return escapeHtml(text).replace(/"/g, '&quot;');
+  }
+
+  function sanitizeUserInput(rawText) {
+    return String(rawText || '').trim().slice(0, MAX_TEXT_LENGTH);
+  }
+
+  function setSidebarOpen(open) {
+    if (open) {
+      // Only capture focus if it's within the shadow DOM; otherwise fall back to the toggle.
+      const active = shadow.activeElement;
+      chatPreviousFocus = (active && active !== chatToggle) ? active : null;
+      chatSidebar.classList.add('visible');
+      chatToggle.setAttribute('aria-expanded', 'true');
+      chatInput.focus();
+      return;
+    }
+    chatSidebar.classList.remove('visible');
+    chatToggle.setAttribute('aria-expanded', 'false');
+    // Return focus to the previously focused shadow element, or the toggle as a safe fallback.
+    try {
+      if (chatPreviousFocus && typeof chatPreviousFocus.focus === 'function') {
+        chatPreviousFocus.focus();
+      } else {
+        chatToggle.focus();
+      }
+    } catch {
+      chatToggle.focus();
+    }
+    chatPreviousFocus = null;
+  }
+
+  function scrollChatToBottom() {
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  function appendChatMessage(role, text) {
+    const safeRole = role === 'assistant' ? 'assistant' : 'user';
+    // Hide the introductory hint once the first message appears and remove the
+    // aria-describedby reference so screen readers are not pointed at hidden text.
+    if (chatHint && chatHint.parentNode) {
+      chatHint.hidden = true;
+      chatInput.removeAttribute('aria-describedby');
+    }
+    const msg = document.createElement('div');
+    msg.className = `ai-chat-message ai-chat-message--${safeRole}`;
+    if (safeRole === 'assistant') {
+      msg.innerHTML = renderSafeMarkdown(String(text || ''));
+    } else {
+      msg.textContent = String(text || '');
+    }
+    chatMessages.appendChild(msg);
+    scrollChatToBottom();
+  }
+
+  function setChatLoading(loading) {
+    chatSendBtn.disabled = loading;
+    chatInput.disabled = loading;
+    if (loading) {
+      chatSendBtn.textContent = '...';
+      return;
+    }
+    chatSendBtn.textContent = 'Send';
+  }
+
+  async function sendSidebarChatMessage() {
+    const text = sanitizeUserInput(chatInput.value);
+    if (!text) {
+      if (chatSrStatus) chatSrStatus.textContent = 'Please type a message before sending.';
+      return;
+    }
+    if (chatSendBtn.disabled) {
+      if (chatSrStatus) chatSrStatus.textContent = 'A response is in progress. Please wait.';
+      return;
+    }
+    if (chatSrStatus) chatSrStatus.textContent = '';
+
+    chatInput.value = '';
+    appendChatMessage('user', text);
+    setChatLoading(true);
+
+    try {
+      const response = await new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage({ type: 'AI_REQUEST', action: 'chat', text }, (res) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message || 'Request failed.'));
+            return;
+          }
+          resolve(res || {});
+        });
+      });
+
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      appendChatMessage('assistant', response.result || 'No response received.');
+    } catch (err) {
+      appendChatMessage('assistant', `⚠️ ${err.message || 'Unable to send message. Please check your API settings in extension options.'}`);
+    } finally {
+      setChatLoading(false);
+      chatInput.focus();
+    }
   }
 
   function sanitizeRenderedHtml(inputHtml) {
@@ -1490,6 +1668,26 @@
   closeBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     hideAll();
+  });
+
+  chatToggle.addEventListener('click', () => {
+    setSidebarOpen(true);
+  });
+
+  chatMinimizeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setSidebarOpen(false);
+  });
+
+  chatSendBtn.addEventListener('click', () => {
+    sendSidebarChatMessage();
+  });
+
+  chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendSidebarChatMessage();
+    }
   });
 
   // Hide the floating menu whenever the page is scrolled.  The results panel

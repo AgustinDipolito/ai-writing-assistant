@@ -31,6 +31,7 @@ const BASE_ACTIONS = [
   { id: 'grammar', label: 'Grammar' },
   { id: 'style', label: 'Style' },
   { id: 'synonyms', label: 'Synonyms' },
+  { id: 'chat', label: 'Chat' },
   { id: 'generate_image', label: '🎨 Generate Image' },
 ];
 
@@ -84,6 +85,21 @@ Group by word class (nouns, verbs, adjectives, adverbs) if the text is long enou
 ${lang}.
 
 Text:
+"""
+${text}
+"""`,
+
+  // lang resolves from LANGUAGE_INSTRUCTIONS based on responseLanguage config.
+  chat: (text, lang) =>
+    `You are a helpful AI assistant inside a browser extension sidebar chat.
+
+Answer the user's message directly and clearly.
+Use concise markdown formatting when useful.
+If the user asks for edits, suggestions, or rewrites, provide practical output ready to use.
+
+${lang}
+
+User message:
 """
 ${text}
 """`,
