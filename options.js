@@ -113,6 +113,7 @@ const footerModel        = document.getElementById('footerModel');
 // ============================================================
 
 function showStatus(type, message, el = statusEl) {
+  if (!el) return;
   el.className = `status ${type}`;
   el.textContent = message;
   if (type === 'success') {
@@ -373,10 +374,10 @@ function gatherSharedConfig() {
     temperature: parseFloat(temperatureSlider.value),
     maxTokens: Math.min(8000, Math.max(100, parseInt(maxTokensInput.value, 10) || 1500)),
     responseLanguage: responseLanguage.value,
-    promptGrammar: promptGrammar.value.trim(),
-    promptStyle: promptStyle.value.trim(),
-    promptSynonyms: promptSynonyms.value.trim(),
-    systemInstruction: systemInstruction.value.trim(),
+    promptGrammar: (promptGrammar?.value || '').trim(),
+    promptStyle: (promptStyle?.value || '').trim(),
+    promptSynonyms: (promptSynonyms?.value || '').trim(),
+    systemInstruction: (systemInstruction?.value || '').trim(),
   };
 }
 
@@ -403,6 +404,7 @@ function autoSaveConfig() {
       }
 
       chrome.storage.local.set({ providerConfig: pc }, () => {
+        if (!configAutoSave) return;
         configAutoSave.classList.add('show');
         clearTimeout(autoSaveBadgeTimer);
         autoSaveBadgeTimer = setTimeout(() => {
@@ -420,10 +422,9 @@ temperatureSlider.addEventListener('input', () => {
 });
 maxTokensInput.addEventListener('input', autoSaveConfig);
 responseLanguage.addEventListener('change', autoSaveConfig);
-promptGrammar.addEventListener('input', autoSaveConfig);
-promptStyle.addEventListener('input', autoSaveConfig);
-promptSynonyms.addEventListener('input', autoSaveConfig);
-systemInstruction.addEventListener('input', autoSaveConfig);
+[promptGrammar, promptStyle, promptSynonyms, systemInstruction].forEach((el) => {
+  el?.addEventListener('input', autoSaveConfig);
+});
 if (ollamaBaseUrlInput) {
   ollamaBaseUrlInput.addEventListener('input', autoSaveConfig);
 }
@@ -442,6 +443,7 @@ document.querySelectorAll('textarea.collapsible').forEach((ta) => {
 
 function expandCollapsibleIfFilled() {
   [promptGrammar, promptStyle, promptSynonyms, systemInstruction].forEach((ta) => {
+    if (!ta) return;
     if (ta.value.trim()) ta.classList.add('expanded');
     else ta.classList.remove('expanded');
   });
@@ -476,10 +478,10 @@ chrome.storage.local.get('providerConfig', ({ providerConfig }) => {
   tempValueDisplay.textContent = temperatureSlider.value;
   maxTokensInput.value = cfg.maxTokens || DEFAULTS.maxTokens;
   responseLanguage.value = cfg.responseLanguage || DEFAULTS.responseLanguage;
-  promptGrammar.value = cfg.promptGrammar || '';
-  promptStyle.value = cfg.promptStyle || '';
-  promptSynonyms.value = cfg.promptSynonyms || '';
-  systemInstruction.value = cfg.systemInstruction || '';
+  if (promptGrammar) promptGrammar.value = cfg.promptGrammar || '';
+  if (promptStyle) promptStyle.value = cfg.promptStyle || '';
+  if (promptSynonyms) promptSynonyms.value = cfg.promptSynonyms || '';
+  if (systemInstruction) systemInstruction.value = cfg.systemInstruction || '';
 
 
   updateFooter(providerId, cfg.model);
@@ -492,7 +494,7 @@ chrome.storage.local.get('providerConfig', ({ providerConfig }) => {
 // 11. RESET DEFAULTS
 // ============================================================
 
-resetConfigBtn.addEventListener('click', () => {
+if (resetConfigBtn) resetConfigBtn.addEventListener('click', () => {
   const providerId = providerSelect.value;
   const provider = PROVIDERS[providerId];
 
@@ -501,10 +503,10 @@ resetConfigBtn.addEventListener('click', () => {
   tempValueDisplay.textContent = DEFAULTS.temperature;
   maxTokensInput.value = DEFAULTS.maxTokens;
   responseLanguage.value = DEFAULTS.responseLanguage;
-  promptGrammar.value = '';
-  promptStyle.value = '';
-  promptSynonyms.value = '';
-  systemInstruction.value = '';
+  if (promptGrammar) promptGrammar.value = '';
+  if (promptStyle) promptStyle.value = '';
+  if (promptSynonyms) promptSynonyms.value = '';
+  if (systemInstruction) systemInstruction.value = '';
   expandCollapsibleIfFilled();
 
   const resetCfg = {
@@ -519,7 +521,7 @@ resetConfigBtn.addEventListener('click', () => {
     pc[providerId] = { ...resetCfg, apiKey: savedKey };
     chrome.storage.local.set({ providerConfig: pc }, () => {
       updateFooter(providerId, provider.defaultModel);
-      showStatus('success', 'Reset to defaults!', configStatusEl);
+      showStatus('success', 'Reset to defaults!', configStatusEl || statusEl);
     });
   });
 });
