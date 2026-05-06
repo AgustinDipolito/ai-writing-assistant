@@ -137,7 +137,7 @@
     .ai-chat-toggle { all: unset; position: fixed; right: 16px; bottom: 16px; width: 44px; height: 44px; border-radius: 999px; display: flex; align-items: center; justify-content: center; background: #6366f1; color: #ffffff; box-shadow: 0 8px 24px rgba(99, 102, 241, 0.38); cursor: pointer; pointer-events: auto; z-index: 2147483647; transition: transform 0.15s, opacity 0.15s, background 0.15s; font-size: 19px; }
     .ai-chat-toggle:hover { transform: translateY(-1px); background: #4f46e5; }
     .ai-chat-toggle[aria-expanded="true"] { opacity: 0; pointer-events: none; transform: scale(0.95); }
-    .ai-chat-sidebar { all: initial; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; position: fixed; right: 16px; bottom: 16px; width: 320px; max-width: calc(100vw - 24px); height: 420px; max-height: calc(100vh - 28px); border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08); display: none; flex-direction: column; overflow: hidden; pointer-events: auto; z-index: 2147483647; }
+    .ai-chat-sidebar { all: initial; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; position: fixed; right: 16px; bottom: 68px; width: 320px; max-width: calc(100vw - 24px); height: 420px; max-height: calc(100vh - 28px); border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08); display: none; flex-direction: column; overflow: hidden; pointer-events: auto; z-index: 2147483647; }
     .ai-chat-sidebar.visible { display: flex; animation: aiPanelSlideIn 0.2s ease-out; }
     .ai-chat-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
     .ai-chat-title { font-size: 13px; font-weight: 600; color: #0f172a; }
@@ -615,9 +615,10 @@
   }
 
   function appendChatMessage(role, text) {
+    const safeRole = role === 'assistant' ? 'assistant' : 'user';
     const msg = document.createElement('div');
-    msg.className = `ai-chat-message ai-chat-message--${role}`;
-    if (role === 'assistant') {
+    msg.className = `ai-chat-message ai-chat-message--${safeRole}`;
+    if (safeRole === 'assistant') {
       msg.innerHTML = renderSafeMarkdown(String(text || ''));
     } else {
       msg.textContent = String(text || '');

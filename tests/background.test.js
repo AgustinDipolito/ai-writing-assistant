@@ -444,6 +444,11 @@ test('BASE_ACTIONS includes generate_image', () => {
   assert.ok(ids.includes('generate_image'), 'generate_image should be in BASE_ACTIONS');
 });
 
+test('BASE_ACTIONS includes chat', () => {
+  const ids = BASE_ACTIONS.map((a) => a.id);
+  assert.ok(ids.includes('chat'), 'chat should be in BASE_ACTIONS');
+});
+
 // ============================================================
 // geminiAdapter._buildParts
 // ============================================================
