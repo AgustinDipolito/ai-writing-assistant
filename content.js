@@ -881,7 +881,6 @@
       acceptNode(node) {
         const parent = node?.parentElement;
         if (!parent) return NodeFilter.FILTER_REJECT;
-        if (parent.closest('#ai-writing-assistant-host')) return NodeFilter.FILTER_REJECT;
         if (/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/i.test(parent.tagName)) return NodeFilter.FILTER_REJECT;
         if (!String(node.nodeValue || '').trim()) return NodeFilter.FILTER_REJECT;
         return NodeFilter.FILTER_ACCEPT;
