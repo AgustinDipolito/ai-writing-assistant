@@ -154,6 +154,7 @@
     .ai-chat-send:hover { background: #4f46e5; }
     .ai-chat-send:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
     .ai-chat-hint { font-size: 11.5px; color: #64748b; text-align: center; padding: 5px; }
+    .ai-chat-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; pointer-events: none; }
 
     @media (prefers-color-scheme: dark) {
       .ai-menu { background: #1e1e2e; border-color: #313244; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.2); }
@@ -239,6 +240,7 @@
       <textarea class="ai-chat-input" placeholder="Type a message…" rows="1" aria-label="Chat message" aria-describedby="ai-chat-hint-text"></textarea>
       <button class="ai-chat-send" type="button" aria-label="Send message">Send</button>
     </div>
+    <div class="ai-chat-sr-only" aria-live="assertive" aria-atomic="true" id="ai-chat-sr-status"></div>
   `;
 
   shadow.appendChild(menu);
@@ -257,6 +259,9 @@
   const chatInput = chatSidebar.querySelector('.ai-chat-input');
   const chatSendBtn = chatSidebar.querySelector('.ai-chat-send');
   const chatMinimizeBtn = chatSidebar.querySelector('[data-role="chat-minimize"]');
+  const chatHint = chatSidebar.querySelector('.ai-chat-hint');
+  const chatSrStatus = chatSidebar.querySelector('#ai-chat-sr-status');
+  let chatPreviousFocus = null;
 
   let loadedCustomActions = [];
   let selectedText = '';
@@ -604,6 +609,7 @@
 
   function setSidebarOpen(open) {
     if (open) {
+      chatPreviousFocus = shadow.activeElement || document.activeElement || null;
       chatSidebar.classList.add('visible');
       chatToggle.setAttribute('aria-expanded', 'true');
       chatInput.focus();
@@ -611,6 +617,17 @@
     }
     chatSidebar.classList.remove('visible');
     chatToggle.setAttribute('aria-expanded', 'false');
+    // Return focus to the element that was active before the sidebar opened.
+    try {
+      if (chatPreviousFocus && typeof chatPreviousFocus.focus === 'function') {
+        chatPreviousFocus.focus();
+      } else {
+        chatToggle.focus();
+      }
+    } catch {
+      chatToggle.focus();
+    }
+    chatPreviousFocus = null;
   }
 
   function scrollChatToBottom() {
@@ -619,6 +636,10 @@
 
   function appendChatMessage(role, text) {
     const safeRole = role === 'assistant' ? 'assistant' : 'user';
+    // Hide the introductory hint once the first message appears.
+    if (chatHint && chatHint.parentNode) {
+      chatHint.remove();
+    }
     const msg = document.createElement('div');
     msg.className = `ai-chat-message ai-chat-message--${safeRole}`;
     if (safeRole === 'assistant') {
@@ -642,7 +663,15 @@
 
   async function sendSidebarChatMessage() {
     const text = sanitizeUserInput(chatInput.value);
-    if (!text || chatSendBtn.disabled) return;
+    if (!text) {
+      if (chatSrStatus) chatSrStatus.textContent = 'Please type a message before sending.';
+      return;
+    }
+    if (chatSendBtn.disabled) {
+      if (chatSrStatus) chatSrStatus.textContent = 'A response is in progress. Please wait.';
+      return;
+    }
+    if (chatSrStatus) chatSrStatus.textContent = '';
 
     chatInput.value = '';
     appendChatMessage('user', text);
