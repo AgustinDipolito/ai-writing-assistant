@@ -6,6 +6,9 @@
 const STREAM_PORT_NAME = 'ai_stream';
 const CONTEXT_ROOT_ID = 'awa_root';
 const CONTEXT_ACTION_PREFIX = 'awa_action:';
+const PAGE_CONTEXT_TITLE_MAX_LENGTH = 240;
+const PAGE_CONTEXT_URL_MAX_LENGTH = 2000;
+const PAGE_CONTEXT_TEXT_MAX_LENGTH = 4000;
 
 const activeStreams = new Map();
 const activeTabByWindow = new Map();
@@ -155,9 +158,9 @@ function injectPageContext(prompt, pageContext) {
   const basePrompt = String(prompt || '');
   if (!pageContext || typeof pageContext !== 'object') return basePrompt;
 
-  const title = clampText(pageContext.title, 240);
-  const url = clampText(pageContext.url, 2000);
-  const visibleText = clampText(pageContext.visibleText, 4000);
+  const title = clampText(pageContext.title, PAGE_CONTEXT_TITLE_MAX_LENGTH);
+  const url = clampText(pageContext.url, PAGE_CONTEXT_URL_MAX_LENGTH);
+  const visibleText = clampText(pageContext.visibleText, PAGE_CONTEXT_TEXT_MAX_LENGTH);
 
   const parts = [];
   if (title) parts.push(`Page title: ${title}`);
