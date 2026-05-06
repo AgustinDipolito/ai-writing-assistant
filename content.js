@@ -232,11 +232,11 @@
       <div class="ai-chat-title">Sidebar Chat</div>
       <button class="ai-icon-btn" data-role="chat-minimize" title="Minimize">${ICONS.close}</button>
     </div>
-    <div class="ai-chat-messages">
-      <div class="ai-chat-hint">Ask anything while you browse.</div>
+    <div class="ai-chat-messages" role="log" aria-live="polite" aria-relevant="additions text">
+      <div class="ai-chat-hint" id="ai-chat-hint-text">Ask anything while you browse.</div>
     </div>
     <div class="ai-chat-composer">
-      <textarea class="ai-chat-input" placeholder="Type a message…" rows="1" aria-label="Chat message"></textarea>
+      <textarea class="ai-chat-input" placeholder="Type a message…" rows="1" aria-label="Chat message" aria-describedby="ai-chat-hint-text"></textarea>
       <button class="ai-chat-send" type="button" aria-label="Send message">Send</button>
     </div>
   `;
@@ -272,7 +272,6 @@
   let clearContextAfterRequest = false;
   let lastAnchorRect = null;
   let lastMousePoint = { x: Math.round(window.innerWidth / 2), y: Math.max(48, Math.round(window.innerHeight * 0.12)) };
-  let chatLoading = false;
 
   function isEditableElement(node) {
     if (!(node instanceof Element)) return false;
@@ -628,7 +627,6 @@
   }
 
   function setChatLoading(loading) {
-    chatLoading = loading;
     chatSendBtn.disabled = loading;
     chatInput.disabled = loading;
     if (loading) {
@@ -639,8 +637,8 @@
   }
 
   async function sendSidebarChatMessage() {
-    const text = SelectionUtils.clampText(chatInput.value || '', MAX_TEXT_LENGTH);
-    if (!text || chatLoading) return;
+    const text = String(chatInput.value || '').trim().slice(0, MAX_TEXT_LENGTH);
+    if (!text || chatSendBtn.disabled) return;
 
     chatInput.value = '';
     appendChatMessage('user', text);
