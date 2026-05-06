@@ -1017,61 +1017,7 @@
     </details>
 
     <div class="divider"></div>
-
-    <h2 class="section-title">Custom Prompts</h2>
-    <p class="hint" style="margin-bottom: 12px;">
-        Customize the instructions sent to the AI for each action. Use <code>{{TEXT}}</code> as a placeholder for the
-        selected text.
-        Leave blank to use the default prompt.
-    </p>
-
-    <div class="form-group">
-        <label for="promptGrammar">Grammar Prompt</label>
-        <textarea id="promptGrammar" rows="1" class="collapsible"
-            placeholder="Click to edit — Default: Check grammar, spelling, and punctuation errors..."></textarea>
-    </div>
-
-    <div class="form-group">
-        <label for="promptStyle">Style Prompt</label>
-        <textarea id="promptStyle" rows="1" class="collapsible"
-            placeholder="Click to edit — Default: Analyze writing style for clarity, conciseness, tone..."></textarea>
-    </div>
-
-    <div class="form-group">
-        <label for="promptSynonyms">Synonyms Prompt</label>
-        <textarea id="promptSynonyms" rows="1" class="collapsible"
-            placeholder="Click to edit — Default: Provide 2-4 synonyms for each significant word..."></textarea>
-    </div>
-
-    <div class="form-group">
-        <label for="systemInstruction">System Instruction (global)</label>
-        <textarea id="systemInstruction" rows="1" class="collapsible"
-            placeholder="Click to edit — Optional global instruction (e.g., &quot;Always be concise&quot;, &quot;Use formal tone&quot;)"></textarea>
-        <p class="hint">Applied to all three actions. Useful for setting a global tone or style.</p>
-    </div>
-
-    <div class="btn-row">
-        <button class="btn-secondary" id="resetConfig">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-                stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="1 4 1 10 7 10" />
-                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
-            </svg>
-            Reset Defaults
-        </button>
-        <span class="auto-save-badge" id="configAutoSave">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
-                stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="20 6 9 17 4 12" />
-            </svg>
-            Saved
-        </span>
-    </div>
-
-    <div class="status" id="configStatus"></div>
-
-    <div class="divider"></div>
-
+    
     <!-- ===== Custom Actions ===== -->
     <h2 class="section-title">Custom Actions</h2>
     <p class="hint" style="margin-bottom: 14px;">
