@@ -872,10 +872,41 @@
     return { text: '', rect: null };
   }
 
+  function collectPageTextExcerpt(maxLength) {
+    const limit = Number.isInteger(maxLength) && maxLength > 0 ? maxLength : MAX_PAGE_CONTEXT_TEXT_LENGTH;
+    const root = document.querySelector('main, article, [role="main"]') || document.body;
+    if (!root) return '';
+
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const parent = node?.parentElement;
+        if (!parent) return NodeFilter.FILTER_REJECT;
+        if (parent.closest('#ai-writing-assistant-host')) return NodeFilter.FILTER_REJECT;
+        if (/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/i.test(parent.tagName)) return NodeFilter.FILTER_REJECT;
+        if (!String(node.nodeValue || '').trim()) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+
+    let excerpt = '';
+    while (walker.nextNode() && excerpt.length < limit) {
+      const chunk = String(walker.currentNode.nodeValue || '').replace(/\s+/g, ' ').trim();
+      if (!chunk) continue;
+
+      const prefix = excerpt ? ' ' : '';
+      const remaining = limit - excerpt.length - prefix.length;
+      if (remaining <= 0) break;
+
+      excerpt += prefix + (chunk.length > remaining ? chunk.slice(0, remaining) : chunk);
+    }
+
+    return excerpt.trim();
+  }
+
   function buildPageContextPayload() {
     const title = SelectionUtils.clampText(document.title || '', MAX_PAGE_CONTEXT_TITLE_LENGTH);
     const url = SelectionUtils.clampText(window.location.href || '', MAX_PAGE_CONTEXT_URL_LENGTH);
-    const visibleText = SelectionUtils.clampText(document.body?.innerText || '', MAX_PAGE_CONTEXT_TEXT_LENGTH);
+    const visibleText = collectPageTextExcerpt(MAX_PAGE_CONTEXT_TEXT_LENGTH);
 
     if (!title && !url && !visibleText) return null;
 

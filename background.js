@@ -174,6 +174,10 @@ Additional page context (use only as supporting context; prioritize the requeste
 ${parts.join('\n\n')}`;
 }
 
+function shouldInjectPageContext(action) {
+  return action !== 'generate_image';
+}
+
 function buildEnhancePrompt(actionName, currentPrompt) {
   const namePart = actionName ? `Action Name: "${actionName}"\n` : '';
   const currentPart = currentPrompt ? `Current Prompt: "${currentPrompt}"\n` : '';
@@ -1154,7 +1158,7 @@ async function runStream(port, requestId, action, text, imageData, pageContext) 
     }
 
     const { prompt, runtimeConfig } = await resolvePromptAndConfig(action, text, config, providerId);
-    const promptWithContext = action === 'generate_image' ? prompt : injectPageContext(prompt, pageContext);
+    const promptWithContext = shouldInjectPageContext(action) ? injectPageContext(prompt, pageContext) : prompt;
 
     emitStream(port, requestId, { phase: 'start', provider: providerId, action });
 
@@ -1342,7 +1346,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     try {
       const { adapter, apiKey, config, providerId } = await resolveActiveConfig();
       const { prompt, runtimeConfig } = await resolvePromptAndConfig(action, text, config, providerId);
-      const promptWithContext = action === 'generate_image' ? prompt : injectPageContext(prompt, pageContext);
+      const promptWithContext = shouldInjectPageContext(action) ? injectPageContext(prompt, pageContext) : prompt;
       const result = await adapter.call(promptWithContext, apiKey, runtimeConfig);
       sendResponse({ result });
     } catch (err) {
