@@ -121,6 +121,17 @@ function showStatus(type, message, el = statusEl) {
   }
 }
 
+function escapeHtmlText(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function escapeAttrValue(str) {
+  return escapeHtmlText(str).replace(/"/g, '&quot;');
+}
+
 // ============================================================
 // 4. PROVIDER PANEL SWITCHING
 // ============================================================
@@ -138,7 +149,7 @@ function populateModelSelect(providerId, selectedModel) {
   const provider = PROVIDERS[providerId];
   if (!provider) return;
   modelSelect.innerHTML = provider.models
-    .map((m) => `<option value="${m.value}"${m.value === (selectedModel || provider.defaultModel) ? ' selected' : ''}>${m.label}</option>`)
+    .map((m) => `<option value="${escapeAttrValue(m.value)}"${m.value === (selectedModel || provider.defaultModel) ? ' selected' : ''}>${escapeHtmlText(m.label)}</option>`)
     .join('');
 }
 
@@ -149,19 +160,20 @@ function updateFooter(providerId, model) {
   footerModel.textContent = model || modelSelect.value || provider.defaultModel;
 }
 
-function buildModelOptions(providerId, selectedModel, includeGlobalOption = false) {
+function buildModelOptions(providerId, selectedModel, includeGlobalOption = false, globalOptionLabel = 'Use global model') {
   const provider = PROVIDERS[providerId];
-  if (!provider) return includeGlobalOption ? '<option value="">Use global model</option>' : '';
+  if (!provider) return includeGlobalOption ? `<option value="">${escapeHtmlText(globalOptionLabel)}</option>` : '';
 
-  const head = includeGlobalOption ? '<option value="">Use global model</option>' : '';
+  const head = includeGlobalOption ? `<option value="">${escapeHtmlText(globalOptionLabel)}</option>` : '';
   const options = provider.models
-    .map((m) => `<option value="${m.value}"${m.value === selectedModel ? ' selected' : ''}>${m.label}</option>`)
+    .map((m) => `<option value="${escapeAttrValue(m.value)}"${m.value === selectedModel ? ' selected' : ''}>${escapeHtmlText(m.label)}</option>`)
     .join('');
 
   return head + options;
 }
 
 providerSelect.addEventListener('change', () => {
+  if (customActionsDirty) syncCardsToData();
   switchProviderPanel(providerSelect.value);
   autoSaveConfig();
 });
@@ -368,6 +380,14 @@ function parseOptionalNumber(value, min, max) {
   return Math.min(max, Math.max(min, numeric));
 }
 
+function normalizeTemperature(value) {
+  return Number(value.toFixed(2));
+}
+
+function normalizeMaxTokens(value) {
+  return Math.round(value);
+}
+
 function gatherSharedConfig() {
   return {
     model: modelSelect.value,
@@ -538,6 +558,7 @@ const customActionsStatusEl   = document.getElementById('customActionsStatus');
 const ICON_OPTIONS = ['✏️', '🔍', '📝', '💡', '🎯', '📐', '🧩', '🌐', '⚡', '📖', '🛠️', '🔄'];
 
 let customActions = [];
+let customActionsDirty = false;
 
 function generateId() {
   return 'custom_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7);
@@ -580,6 +601,32 @@ function getCustomActionOverride(action, providerId) {
   return override && typeof override === 'object' ? override : {};
 }
 
+function getGlobalActionOverride(providerId) {
+  const provider = PROVIDERS[providerId];
+  const shared = gatherSharedConfig();
+  return {
+    model: shared.model || provider?.defaultModel || '',
+    temperature: Number.isFinite(shared.temperature) ? normalizeTemperature(shared.temperature) : DEFAULTS.temperature,
+    maxTokens: Number.isFinite(shared.maxTokens) ? normalizeMaxTokens(shared.maxTokens) : DEFAULTS.maxTokens,
+  };
+}
+
+function getResolvedCustomActionOverride(action, providerId) {
+  return {
+    ...getGlobalActionOverride(providerId),
+    ...getCustomActionOverride(action, providerId),
+  };
+}
+
+function hasCustomActionOverride(action, providerId) {
+  return Object.keys(getCustomActionOverride(action, providerId)).length > 0;
+}
+
+function getModelLabel(providerId, model) {
+  const provider = PROVIDERS[providerId];
+  return provider?.models.find((entry) => entry.value === model)?.label || model;
+}
+
 function renderActionCards() {
   if (customActions.length === 0) {
     customActionsList.innerHTML = '<div class="empty-state">No custom actions yet. Click the button below to add one.</div>';
@@ -587,8 +634,16 @@ function renderActionCards() {
   }
 
   const providerId = providerSelect.value;
+  const providerLabel = escapeHtmlText(PROVIDERS[providerId].label);
 
-  customActionsList.innerHTML = customActions.map((action, index) => `
+  customActionsList.innerHTML = customActions.map((action, index) => {
+    const customOverride = getCustomActionOverride(action, providerId);
+    const resolvedOverride = getResolvedCustomActionOverride(action, providerId);
+    const globalOverride = getGlobalActionOverride(providerId);
+    const showCustomState = hasCustomActionOverride(action, providerId);
+    const globalModelLabel = getModelLabel(providerId, globalOverride.model);
+
+    return `
     <div class="custom-action-card${action.hidden ? ' is-hidden' : ''}" data-index="${index}">
       <div class="card-header">
         <span class="card-number">#${index + 1}</span>
@@ -618,39 +673,49 @@ function renderActionCards() {
           <textarea class="action-prompt" placeholder="Write your prompt here. Use {{TEXT}} for the selected text." data-index="${index}">${escapeHtml(action.prompt)}</textarea>
         </div>
         <div>
-          <label>Per-Action Overrides (${PROVIDERS[providerId].label})</label>
-          <div class="override-fields">
-            <div>
-              <label>Model</label>
-              <select class="action-override-model" data-index="${index}">
-                ${buildModelOptions(providerId, getCustomActionOverride(action, providerId).model, true)}
-              </select>
+          <details class="advanced-settings" ${showCustomState ? 'open="open"' : ''}>
+            <summary>
+              Advanced Config (${providerLabel})
+              <span class="advanced-summary-badge">${showCustomState ? 'Custom' : 'Global defaults'}</span>
+            </summary>
+            <div class="advanced-settings-body">
+              <p class="override-hint">These values start from your current global ${providerLabel} settings. Matching values keep using the global configuration.</p>
+              <div class="override-fields">
+                <div>
+                  <label>Model</label>
+                  <select class="action-override-model" data-index="${index}">
+                    ${buildModelOptions(providerId, customOverride.model, true, `Use global model (${globalModelLabel})`)}
+                  </select>
+                </div>
+                <div>
+                  <label>Temperature</label>
+                  <input type="number" class="action-override-temp" data-index="${index}" min="0" max="1" step="0.1" value="${escapeAttrValue(resolvedOverride.temperature)}">
+                </div>
+                <div>
+                  <label>Max Output Tokens</label>
+                  <input type="number" class="action-override-tokens" data-index="${index}" min="100" max="8000" step="100" value="${escapeAttrValue(resolvedOverride.maxTokens)}">
+                </div>
+              </div>
             </div>
-            <div>
-              <label>Temp</label>
-              <input type="number" class="action-override-temp" data-index="${index}" min="0" max="1" step="0.1" placeholder="Global" value="${getCustomActionOverride(action, providerId).temperature ?? ''}">
-            </div>
-            <div>
-              <label>Max Tokens</label>
-              <input type="number" class="action-override-tokens" data-index="${index}" min="100" max="8000" step="100" placeholder="Global" value="${getCustomActionOverride(action, providerId).maxTokens ?? ''}">
-            </div>
-          </div>
+          </details>
         </div>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function escapeAttr(str) {
-  return str.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return escapeAttrValue(str);
 }
 
 function escapeHtml(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return escapeHtmlText(str);
 }
 
 function syncCardsToData() {
   const providerId = providerSelect.value;
+  const globalOverride = getGlobalActionOverride(providerId);
   const cards = customActionsList.querySelectorAll('.custom-action-card');
   cards.forEach((card, index) => {
     if (customActions[index]) {
@@ -666,9 +731,19 @@ function syncCardsToData() {
       const maxTokens = parseOptionalNumber(card.querySelector('.action-override-tokens')?.value, 100, 8000);
       const override = {};
 
-      if (model) override.model = model;
-      if (typeof temperature === 'number') override.temperature = Number(temperature.toFixed(2));
-      if (typeof maxTokens === 'number') override.maxTokens = Math.round(maxTokens);
+      if (model && model !== globalOverride.model) override.model = model;
+      if (typeof temperature === 'number') {
+        const normalizedTemperature = normalizeTemperature(temperature);
+        if (normalizedTemperature !== globalOverride.temperature) {
+          override.temperature = normalizedTemperature;
+        }
+      }
+      if (typeof maxTokens === 'number') {
+        const normalizedMaxTokens = normalizeMaxTokens(maxTokens);
+        if (normalizedMaxTokens !== globalOverride.maxTokens) {
+          override.maxTokens = normalizedMaxTokens;
+        }
+      }
 
       if (Object.keys(override).length > 0) {
         customActions[index].overrides[providerId] = override;
@@ -677,6 +752,7 @@ function syncCardsToData() {
       }
     }
   });
+  customActionsDirty = false;
 }
 
 addCustomActionBtn.addEventListener('click', () => {
@@ -735,6 +811,14 @@ customActionsList.addEventListener('click', (e) => {
       }
     );
   }
+});
+
+customActionsList.addEventListener('input', (e) => {
+  if (e.target.closest('.custom-action-card')) customActionsDirty = true;
+});
+
+customActionsList.addEventListener('change', (e) => {
+  if (e.target.closest('.custom-action-card')) customActionsDirty = true;
 });
 
 saveCustomActionsBtn.addEventListener('click', () => {
