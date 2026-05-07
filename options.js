@@ -149,11 +149,11 @@ function updateFooter(providerId, model) {
   footerModel.textContent = model || modelSelect.value || provider.defaultModel;
 }
 
-function buildModelOptions(providerId, selectedModel, includeGlobalOption = false) {
+function buildModelOptions(providerId, selectedModel, includeGlobalOption = false, globalOptionLabel = 'Use global model') {
   const provider = PROVIDERS[providerId];
   if (!provider) return includeGlobalOption ? '<option value="">Use global model</option>' : '';
 
-  const head = includeGlobalOption ? '<option value="">Use global model</option>' : '';
+  const head = includeGlobalOption ? `<option value="">${globalOptionLabel}</option>` : '';
   const options = provider.models
     .map((m) => `<option value="${m.value}"${m.value === selectedModel ? ' selected' : ''}>${m.label}</option>`)
     .join('');
@@ -602,6 +602,11 @@ function hasCustomActionOverride(action, providerId) {
   return Object.keys(getCustomActionOverride(action, providerId)).length > 0;
 }
 
+function getModelLabel(providerId, model) {
+  const provider = PROVIDERS[providerId];
+  return provider?.models.find((entry) => entry.value === model)?.label || model;
+}
+
 function renderActionCards() {
   if (customActions.length === 0) {
     customActionsList.innerHTML = '<div class="empty-state">No custom actions yet. Click the button below to add one.</div>';
@@ -610,7 +615,14 @@ function renderActionCards() {
 
   const providerId = providerSelect.value;
 
-  customActionsList.innerHTML = customActions.map((action, index) => `
+  customActionsList.innerHTML = customActions.map((action, index) => {
+    const customOverride = getCustomActionOverride(action, providerId);
+    const resolvedOverride = getResolvedCustomActionOverride(action, providerId);
+    const globalOverride = getGlobalActionOverride(providerId);
+    const showCustomState = hasCustomActionOverride(action, providerId);
+    const globalModelLabel = getModelLabel(providerId, globalOverride.model);
+
+    return `
     <div class="custom-action-card${action.hidden ? ' is-hidden' : ''}" data-index="${index}">
       <div class="card-header">
         <span class="card-number">#${index + 1}</span>
@@ -640,10 +652,10 @@ function renderActionCards() {
           <textarea class="action-prompt" placeholder="Write your prompt here. Use {{TEXT}} for the selected text." data-index="${index}">${escapeHtml(action.prompt)}</textarea>
         </div>
         <div>
-          <details class="advanced-settings" ${hasCustomActionOverride(action, providerId) ? 'open' : ''}>
+          <details class="advanced-settings" ${showCustomState ? 'open="open"' : ''}>
             <summary>
               Advanced Config (${PROVIDERS[providerId].label})
-              <span class="advanced-summary-badge">${hasCustomActionOverride(action, providerId) ? 'Custom' : 'Global defaults'}</span>
+              <span class="advanced-summary-badge">${showCustomState ? 'Custom' : 'Global defaults'}</span>
             </summary>
             <div class="advanced-settings-body">
               <p class="override-hint">These values start from your current global ${PROVIDERS[providerId].label} settings. Matching values keep using the global configuration.</p>
@@ -651,16 +663,16 @@ function renderActionCards() {
                 <div>
                   <label>Model</label>
                   <select class="action-override-model" data-index="${index}">
-                    ${buildModelOptions(providerId, getResolvedCustomActionOverride(action, providerId).model)}
+                    ${buildModelOptions(providerId, customOverride.model, true, `Use global model (${globalModelLabel})`)}
                   </select>
                 </div>
                 <div>
                   <label>Temperature</label>
-                  <input type="number" class="action-override-temp" data-index="${index}" min="0" max="1" step="0.1" value="${getResolvedCustomActionOverride(action, providerId).temperature}">
+                  <input type="number" class="action-override-temp" data-index="${index}" min="0" max="1" step="0.1" value="${resolvedOverride.temperature}">
                 </div>
                 <div>
                   <label>Max Output Tokens</label>
-                  <input type="number" class="action-override-tokens" data-index="${index}" min="100" max="8000" step="100" value="${getResolvedCustomActionOverride(action, providerId).maxTokens}">
+                  <input type="number" class="action-override-tokens" data-index="${index}" min="100" max="8000" step="100" value="${resolvedOverride.maxTokens}">
                 </div>
               </div>
             </div>
@@ -668,7 +680,8 @@ function renderActionCards() {
         </div>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function escapeAttr(str) {
