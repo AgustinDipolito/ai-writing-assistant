@@ -380,6 +380,14 @@ function parseOptionalNumber(value, min, max) {
   return Math.min(max, Math.max(min, numeric));
 }
 
+function normalizeTemperature(value) {
+  return Number(value.toFixed(2));
+}
+
+function normalizeMaxTokens(value) {
+  return Math.round(value);
+}
+
 function gatherSharedConfig() {
   return {
     model: modelSelect.value,
@@ -598,8 +606,8 @@ function getGlobalActionOverride(providerId) {
   const shared = gatherSharedConfig();
   return {
     model: shared.model || provider?.defaultModel || '',
-    temperature: Number.isFinite(shared.temperature) ? Number(shared.temperature.toFixed(2)) : DEFAULTS.temperature,
-    maxTokens: Number.isFinite(shared.maxTokens) ? Math.round(shared.maxTokens) : DEFAULTS.maxTokens,
+    temperature: Number.isFinite(shared.temperature) ? normalizeTemperature(shared.temperature) : DEFAULTS.temperature,
+    maxTokens: Number.isFinite(shared.maxTokens) ? normalizeMaxTokens(shared.maxTokens) : DEFAULTS.maxTokens,
   };
 }
 
@@ -725,13 +733,13 @@ function syncCardsToData() {
 
       if (model && model !== globalOverride.model) override.model = model;
       if (typeof temperature === 'number') {
-        const normalizedTemperature = Number(temperature.toFixed(2));
+        const normalizedTemperature = normalizeTemperature(temperature);
         if (normalizedTemperature !== globalOverride.temperature) {
           override.temperature = normalizedTemperature;
         }
       }
       if (typeof maxTokens === 'number') {
-        const normalizedMaxTokens = Math.round(maxTokens);
+        const normalizedMaxTokens = normalizeMaxTokens(maxTokens);
         if (normalizedMaxTokens !== globalOverride.maxTokens) {
           override.maxTokens = normalizedMaxTokens;
         }
