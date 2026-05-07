@@ -624,7 +624,10 @@
       chatPreviousFocus = (active && active !== chatToggle) ? active : null;
       chatSidebar.classList.add('visible');
       chatToggle.setAttribute('aria-expanded', 'true');
-      chatInput.focus();
+      // Defer focus so the browser has a chance to render the newly-visible
+      // sidebar (display: flex is applied via the 'visible' class) before
+      // attempting to focus the input — otherwise focus silently fails.
+      requestAnimationFrame(() => chatInput.focus());
       return;
     }
     chatSidebar.classList.remove('visible');
@@ -711,7 +714,9 @@
       appendChatMessage('assistant', `⚠️ ${err.message || 'Unable to send message. Please check your API settings in extension options.'}`);
     } finally {
       setChatLoading(false);
-      chatInput.focus();
+      // Defer focus so the browser processes the disabled→enabled transition
+      // before we attempt to focus the input.
+      requestAnimationFrame(() => chatInput.focus());
     }
   }
 
