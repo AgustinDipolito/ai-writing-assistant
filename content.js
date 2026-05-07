@@ -1149,7 +1149,7 @@
       return;
     }
 
-      hideAll({ preserveContext: true });
+    hideAll({ preserveContext: true });
   }
 
   function hideAll({ preserveContext = false } = {}) {
