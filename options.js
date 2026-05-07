@@ -162,6 +162,7 @@ function buildModelOptions(providerId, selectedModel, includeGlobalOption = fals
 }
 
 providerSelect.addEventListener('change', () => {
+  syncCardsToData();
   switchProviderPanel(providerSelect.value);
   autoSaveConfig();
 });
@@ -580,6 +581,27 @@ function getCustomActionOverride(action, providerId) {
   return override && typeof override === 'object' ? override : {};
 }
 
+function getGlobalActionOverride(providerId) {
+  const provider = PROVIDERS[providerId];
+  const shared = gatherSharedConfig();
+  return {
+    model: shared.model || provider?.defaultModel || '',
+    temperature: Number.isFinite(shared.temperature) ? Number(shared.temperature.toFixed(2)) : DEFAULTS.temperature,
+    maxTokens: Number.isFinite(shared.maxTokens) ? Math.round(shared.maxTokens) : DEFAULTS.maxTokens,
+  };
+}
+
+function getResolvedCustomActionOverride(action, providerId) {
+  return {
+    ...getGlobalActionOverride(providerId),
+    ...getCustomActionOverride(action, providerId),
+  };
+}
+
+function hasCustomActionOverride(action, providerId) {
+  return Object.keys(getCustomActionOverride(action, providerId)).length > 0;
+}
+
 function renderActionCards() {
   if (customActions.length === 0) {
     customActionsList.innerHTML = '<div class="empty-state">No custom actions yet. Click the button below to add one.</div>';
@@ -618,23 +640,31 @@ function renderActionCards() {
           <textarea class="action-prompt" placeholder="Write your prompt here. Use {{TEXT}} for the selected text." data-index="${index}">${escapeHtml(action.prompt)}</textarea>
         </div>
         <div>
-          <label>Per-Action Overrides (${PROVIDERS[providerId].label})</label>
-          <div class="override-fields">
-            <div>
-              <label>Model</label>
-              <select class="action-override-model" data-index="${index}">
-                ${buildModelOptions(providerId, getCustomActionOverride(action, providerId).model, true)}
-              </select>
+          <details class="advanced-settings" ${hasCustomActionOverride(action, providerId) ? 'open' : ''}>
+            <summary>
+              Advanced Config (${PROVIDERS[providerId].label})
+              <span class="advanced-summary-badge">${hasCustomActionOverride(action, providerId) ? 'Custom' : 'Global defaults'}</span>
+            </summary>
+            <div class="advanced-settings-body">
+              <p class="override-hint">These values start from your current global ${PROVIDERS[providerId].label} settings. Matching values keep using the global configuration.</p>
+              <div class="override-fields">
+                <div>
+                  <label>Model</label>
+                  <select class="action-override-model" data-index="${index}">
+                    ${buildModelOptions(providerId, getResolvedCustomActionOverride(action, providerId).model)}
+                  </select>
+                </div>
+                <div>
+                  <label>Temperature</label>
+                  <input type="number" class="action-override-temp" data-index="${index}" min="0" max="1" step="0.1" value="${getResolvedCustomActionOverride(action, providerId).temperature}">
+                </div>
+                <div>
+                  <label>Max Output Tokens</label>
+                  <input type="number" class="action-override-tokens" data-index="${index}" min="100" max="8000" step="100" value="${getResolvedCustomActionOverride(action, providerId).maxTokens}">
+                </div>
+              </div>
             </div>
-            <div>
-              <label>Temp</label>
-              <input type="number" class="action-override-temp" data-index="${index}" min="0" max="1" step="0.1" placeholder="Global" value="${getCustomActionOverride(action, providerId).temperature ?? ''}">
-            </div>
-            <div>
-              <label>Max Tokens</label>
-              <input type="number" class="action-override-tokens" data-index="${index}" min="100" max="8000" step="100" placeholder="Global" value="${getCustomActionOverride(action, providerId).maxTokens ?? ''}">
-            </div>
-          </div>
+          </details>
         </div>
       </div>
     </div>
@@ -651,6 +681,7 @@ function escapeHtml(str) {
 
 function syncCardsToData() {
   const providerId = providerSelect.value;
+  const globalOverride = getGlobalActionOverride(providerId);
   const cards = customActionsList.querySelectorAll('.custom-action-card');
   cards.forEach((card, index) => {
     if (customActions[index]) {
@@ -666,9 +697,19 @@ function syncCardsToData() {
       const maxTokens = parseOptionalNumber(card.querySelector('.action-override-tokens')?.value, 100, 8000);
       const override = {};
 
-      if (model) override.model = model;
-      if (typeof temperature === 'number') override.temperature = Number(temperature.toFixed(2));
-      if (typeof maxTokens === 'number') override.maxTokens = Math.round(maxTokens);
+      if (model && model !== globalOverride.model) override.model = model;
+      if (typeof temperature === 'number') {
+        const normalizedTemperature = Number(temperature.toFixed(2));
+        if (normalizedTemperature !== globalOverride.temperature) {
+          override.temperature = normalizedTemperature;
+        }
+      }
+      if (typeof maxTokens === 'number') {
+        const normalizedMaxTokens = Math.round(maxTokens);
+        if (normalizedMaxTokens !== globalOverride.maxTokens) {
+          override.maxTokens = normalizedMaxTokens;
+        }
+      }
 
       if (Object.keys(override).length > 0) {
         customActions[index].overrides[providerId] = override;
