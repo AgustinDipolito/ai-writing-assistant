@@ -121,6 +121,17 @@ function showStatus(type, message, el = statusEl) {
   }
 }
 
+function escapeHtmlText(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function escapeAttrValue(str) {
+  return escapeHtmlText(str).replace(/"/g, '&quot;');
+}
+
 // ============================================================
 // 4. PROVIDER PANEL SWITCHING
 // ============================================================
@@ -138,7 +149,7 @@ function populateModelSelect(providerId, selectedModel) {
   const provider = PROVIDERS[providerId];
   if (!provider) return;
   modelSelect.innerHTML = provider.models
-    .map((m) => `<option value="${m.value}"${m.value === (selectedModel || provider.defaultModel) ? ' selected' : ''}>${m.label}</option>`)
+    .map((m) => `<option value="${escapeAttrValue(m.value)}"${m.value === (selectedModel || provider.defaultModel) ? ' selected' : ''}>${escapeHtmlText(m.label)}</option>`)
     .join('');
 }
 
@@ -151,18 +162,18 @@ function updateFooter(providerId, model) {
 
 function buildModelOptions(providerId, selectedModel, includeGlobalOption = false, globalOptionLabel = 'Use global model') {
   const provider = PROVIDERS[providerId];
-  if (!provider) return includeGlobalOption ? '<option value="">Use global model</option>' : '';
+  if (!provider) return includeGlobalOption ? `<option value="">${escapeHtmlText(globalOptionLabel)}</option>` : '';
 
-  const head = includeGlobalOption ? `<option value="">${globalOptionLabel}</option>` : '';
+  const head = includeGlobalOption ? `<option value="">${escapeHtmlText(globalOptionLabel)}</option>` : '';
   const options = provider.models
-    .map((m) => `<option value="${m.value}"${m.value === selectedModel ? ' selected' : ''}>${m.label}</option>`)
+    .map((m) => `<option value="${escapeAttrValue(m.value)}"${m.value === selectedModel ? ' selected' : ''}>${escapeHtmlText(m.label)}</option>`)
     .join('');
 
   return head + options;
 }
 
 providerSelect.addEventListener('change', () => {
-  syncCardsToData();
+  if (customActionsDirty) syncCardsToData();
   switchProviderPanel(providerSelect.value);
   autoSaveConfig();
 });
@@ -539,6 +550,7 @@ const customActionsStatusEl   = document.getElementById('customActionsStatus');
 const ICON_OPTIONS = ['✏️', '🔍', '📝', '💡', '🎯', '📐', '🧩', '🌐', '⚡', '📖', '🛠️', '🔄'];
 
 let customActions = [];
+let customActionsDirty = false;
 
 function generateId() {
   return 'custom_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7);
@@ -614,6 +626,7 @@ function renderActionCards() {
   }
 
   const providerId = providerSelect.value;
+  const providerLabel = escapeHtmlText(PROVIDERS[providerId].label);
 
   customActionsList.innerHTML = customActions.map((action, index) => {
     const customOverride = getCustomActionOverride(action, providerId);
@@ -654,11 +667,11 @@ function renderActionCards() {
         <div>
           <details class="advanced-settings" ${showCustomState ? 'open="open"' : ''}>
             <summary>
-              Advanced Config (${PROVIDERS[providerId].label})
+              Advanced Config (${providerLabel})
               <span class="advanced-summary-badge">${showCustomState ? 'Custom' : 'Global defaults'}</span>
             </summary>
             <div class="advanced-settings-body">
-              <p class="override-hint">These values start from your current global ${PROVIDERS[providerId].label} settings. Matching values keep using the global configuration.</p>
+              <p class="override-hint">These values start from your current global ${providerLabel} settings. Matching values keep using the global configuration.</p>
               <div class="override-fields">
                 <div>
                   <label>Model</label>
@@ -685,11 +698,11 @@ function renderActionCards() {
 }
 
 function escapeAttr(str) {
-  return str.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return escapeAttrValue(str);
 }
 
 function escapeHtml(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return escapeHtmlText(str);
 }
 
 function syncCardsToData() {
@@ -731,6 +744,7 @@ function syncCardsToData() {
       }
     }
   });
+  customActionsDirty = false;
 }
 
 addCustomActionBtn.addEventListener('click', () => {
@@ -789,6 +803,14 @@ customActionsList.addEventListener('click', (e) => {
       }
     );
   }
+});
+
+customActionsList.addEventListener('input', (e) => {
+  if (e.target.closest('.custom-action-card')) customActionsDirty = true;
+});
+
+customActionsList.addEventListener('change', (e) => {
+  if (e.target.closest('.custom-action-card')) customActionsDirty = true;
 });
 
 saveCustomActionsBtn.addEventListener('click', () => {
