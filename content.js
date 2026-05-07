@@ -293,6 +293,12 @@
       || (tagName === 'INPUT' && /^(text|search|url|tel|email|password)$/i.test(node.getAttribute('type') || node.type || 'text'));
   }
 
+  function isSetupMenuInteractionActive() {
+    if (!menu.classList.contains('ai-menu--setup')) return false;
+    const active = shadow.activeElement;
+    return active instanceof Element && menu.contains(active);
+  }
+
   function normalizeSelectionSnapshot(snapshot) {
     if (!snapshot || !snapshot.source) return null;
     return snapshot;
@@ -1148,16 +1154,18 @@
       return;
     }
 
-    hideAll();
+    hideAll({ preserveContext: true });
   }
 
-  function hideAll() {
+  function hideAll({ preserveContext = false } = {}) {
     selectedText = '';
     suppressUiUntil = Date.now() + 300;
     try { window.getSelection()?.removeAllRanges(); } catch { /* no-op */ }
     cancelActiveStream();
     clearImageSelection();
-    clearSelectionContext();
+    if (!preserveContext) {
+      clearSelectionContext();
+    }
     buildMenuButtons();
     hideMenu();
     hideResults();
@@ -1522,6 +1530,7 @@
     if (Date.now() < suppressUiUntil) return;
     if (isLoading) return;
     if (results.classList.contains('visible')) return;
+    if (isSetupMenuInteractionActive()) return;
     hideMenuWhenSelectionMissing();
   });
 
@@ -1661,7 +1670,7 @@
     // Clicking anywhere outside closes the entire UI.
     // suppressUiUntil prevents mouseup from immediately re-opening the menu
     // for the same click, while still allowing new selections afterwards.
-    hideAll();
+    hideAll({ preserveContext: true });
   });
 
   document.addEventListener('keydown', (e) => {
@@ -1756,6 +1765,7 @@
     selectionChangeTimer = setTimeout(() => {
       if (Date.now() < suppressUiUntil) return;
       if (!menu.classList.contains('visible') && !results.classList.contains('visible')) return;
+      if (isSetupMenuInteractionActive()) return;
 
       if (isLoading) {
         hideMenu();
