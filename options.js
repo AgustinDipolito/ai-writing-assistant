@@ -681,11 +681,11 @@ function renderActionCards() {
                 </div>
                 <div>
                   <label>Temperature</label>
-                  <input type="number" class="action-override-temp" data-index="${index}" min="0" max="1" step="0.1" value="${resolvedOverride.temperature}">
+                  <input type="number" class="action-override-temp" data-index="${index}" min="0" max="1" step="0.1" value="${escapeAttrValue(resolvedOverride.temperature)}">
                 </div>
                 <div>
                   <label>Max Output Tokens</label>
-                  <input type="number" class="action-override-tokens" data-index="${index}" min="100" max="8000" step="100" value="${resolvedOverride.maxTokens}">
+                  <input type="number" class="action-override-tokens" data-index="${index}" min="100" max="8000" step="100" value="${escapeAttrValue(resolvedOverride.maxTokens)}">
                 </div>
               </div>
             </div>
