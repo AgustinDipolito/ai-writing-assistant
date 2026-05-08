@@ -12,6 +12,26 @@ A **Chrome Extension (Manifest V3)** that injects a floating action menu over se
 
 ---
 
+## AI Power-Ups (Agent Skills Workflow)
+
+Use this lightweight command flow for every non-trivial change:
+
+1. **`/spec`** — define scope, constraints, and acceptance criteria before coding.
+2. **`/plan`** — break work into small, verifiable steps.
+3. **`/build`** — implement incrementally, one vertical slice at a time.
+4. **`/test`** — prove behavior with existing tests and manual extension validation.
+5. **`/review`** — check correctness, maintainability, security, and performance impact.
+6. **`/code-simplify`** — reduce complexity without changing behavior.
+7. **`/ship`** — summarize user impact, rollback path, and follow-up tasks.
+
+Always enforce these quality gates:
+- No speculative refactors outside the requested scope.
+- Validate changed behavior with tests and extension reload checks.
+- Treat prompt/config handling, user input, and external API calls as security-sensitive paths.
+- Keep changes small and reversible.
+
+---
+
 ## File Structure
 
 ```
