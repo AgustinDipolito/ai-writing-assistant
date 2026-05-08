@@ -106,35 +106,30 @@ const configStatusEl     = document.getElementById('configStatus');
 const configAutoSave     = document.getElementById('configAutoSave');
 const footerProvider     = document.getElementById('footerProvider');
 const footerModel        = document.getElementById('footerModel');
-const ACTION_IDS         = ['grammar', 'style', 'synonyms'];
-const baseOverrideInputs = {
-  grammar: {
-    model: document.getElementById('overrideModel-grammar'),
-    temperature: document.getElementById('overrideTemp-grammar'),
-    maxTokens: document.getElementById('overrideTokens-grammar'),
-  },
-  style: {
-    model: document.getElementById('overrideModel-style'),
-    temperature: document.getElementById('overrideTemp-style'),
-    maxTokens: document.getElementById('overrideTokens-style'),
-  },
-  synonyms: {
-    model: document.getElementById('overrideModel-synonyms'),
-    temperature: document.getElementById('overrideTemp-synonyms'),
-    maxTokens: document.getElementById('overrideTokens-synonyms'),
-  },
-};
+
 
 // ============================================================
 // 3. STATUS HELPER
 // ============================================================
 
 function showStatus(type, message, el = statusEl) {
+  if (!el) return;
   el.className = `status ${type}`;
   el.textContent = message;
   if (type === 'success') {
     setTimeout(() => { el.className = 'status'; }, 4000);
   }
+}
+
+function escapeHtmlText(str) {
+  return String(str ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+function escapeAttrValue(str) {
+  return escapeHtmlText(str).replace(/"/g, '&quot;');
 }
 
 // ============================================================
@@ -146,7 +141,6 @@ function switchProviderPanel(providerId) {
     providerPanels[id].style.display = id === providerId ? '' : 'none';
   });
   populateModelSelect(providerId);
-  populateBaseOverrideModelSelects(providerId);
   renderActionCards();
   updateFooter(providerId);
 }
@@ -155,7 +149,7 @@ function populateModelSelect(providerId, selectedModel) {
   const provider = PROVIDERS[providerId];
   if (!provider) return;
   modelSelect.innerHTML = provider.models
-    .map((m) => `<option value="${m.value}"${m.value === (selectedModel || provider.defaultModel) ? ' selected' : ''}>${m.label}</option>`)
+    .map((m) => `<option value="${escapeAttrValue(m.value)}"${m.value === (selectedModel || provider.defaultModel) ? ' selected' : ''}>${escapeHtmlText(m.label)}</option>`)
     .join('');
 }
 
@@ -166,28 +160,20 @@ function updateFooter(providerId, model) {
   footerModel.textContent = model || modelSelect.value || provider.defaultModel;
 }
 
-function buildModelOptions(providerId, selectedModel, includeGlobalOption = false) {
+function buildModelOptions(providerId, selectedModel, includeGlobalOption = false, globalOptionLabel = 'Use global model') {
   const provider = PROVIDERS[providerId];
-  if (!provider) return includeGlobalOption ? '<option value="">Use global model</option>' : '';
+  if (!provider) return includeGlobalOption ? `<option value="">${escapeHtmlText(globalOptionLabel)}</option>` : '';
 
-  const head = includeGlobalOption ? '<option value="">Use global model</option>' : '';
+  const head = includeGlobalOption ? `<option value="">${escapeHtmlText(globalOptionLabel)}</option>` : '';
   const options = provider.models
-    .map((m) => `<option value="${m.value}"${m.value === selectedModel ? ' selected' : ''}>${m.label}</option>`)
+    .map((m) => `<option value="${escapeAttrValue(m.value)}"${m.value === selectedModel ? ' selected' : ''}>${escapeHtmlText(m.label)}</option>`)
     .join('');
 
   return head + options;
 }
 
-function populateBaseOverrideModelSelects(providerId) {
-  ACTION_IDS.forEach((actionId) => {
-    const select = baseOverrideInputs[actionId]?.model;
-    if (!select) return;
-    const currentValue = select.value || '';
-    select.innerHTML = buildModelOptions(providerId, currentValue, true);
-  });
-}
-
 providerSelect.addEventListener('change', () => {
+  if (customActionsDirty) syncCardsToData();
   switchProviderPanel(providerSelect.value);
   autoSaveConfig();
 });
@@ -394,42 +380,12 @@ function parseOptionalNumber(value, min, max) {
   return Math.min(max, Math.max(min, numeric));
 }
 
-function gatherBaseActionOverrides() {
-  const overrides = {};
-
-  ACTION_IDS.forEach((actionId) => {
-    const actionInputs = baseOverrideInputs[actionId];
-    if (!actionInputs) return;
-
-    const actionOverride = {};
-    const model = actionInputs.model?.value?.trim();
-    const temperature = parseOptionalNumber(actionInputs.temperature?.value, 0, 1);
-    const maxTokens = parseOptionalNumber(actionInputs.maxTokens?.value, 100, 8000);
-
-    if (model) actionOverride.model = model;
-    if (typeof temperature === 'number') actionOverride.temperature = Number(temperature.toFixed(2));
-    if (typeof maxTokens === 'number') actionOverride.maxTokens = Math.round(maxTokens);
-
-    if (Object.keys(actionOverride).length > 0) {
-      overrides[actionId] = actionOverride;
-    }
-  });
-
-  return overrides;
+function normalizeTemperature(value) {
+  return Number(value.toFixed(2));
 }
 
-function setBaseActionOverridesInForm(providerId, actionOverrides = {}) {
-  populateBaseOverrideModelSelects(providerId);
-
-  ACTION_IDS.forEach((actionId) => {
-    const actionInputs = baseOverrideInputs[actionId];
-    const override = actionOverrides[actionId] || {};
-    if (!actionInputs) return;
-
-    actionInputs.model.value = override.model || '';
-    actionInputs.temperature.value = override.temperature ?? '';
-    actionInputs.maxTokens.value = override.maxTokens ?? '';
-  });
+function normalizeMaxTokens(value) {
+  return Math.round(value);
 }
 
 function gatherSharedConfig() {
@@ -438,11 +394,10 @@ function gatherSharedConfig() {
     temperature: parseFloat(temperatureSlider.value),
     maxTokens: Math.min(8000, Math.max(100, parseInt(maxTokensInput.value, 10) || 1500)),
     responseLanguage: responseLanguage.value,
-    promptGrammar: promptGrammar.value.trim(),
-    promptStyle: promptStyle.value.trim(),
-    promptSynonyms: promptSynonyms.value.trim(),
-    systemInstruction: systemInstruction.value.trim(),
-    actionOverrides: gatherBaseActionOverrides(),
+    promptGrammar: (promptGrammar?.value || '').trim(),
+    promptStyle: (promptStyle?.value || '').trim(),
+    promptSynonyms: (promptSynonyms?.value || '').trim(),
+    systemInstruction: (systemInstruction?.value || '').trim(),
   };
 }
 
@@ -469,6 +424,7 @@ function autoSaveConfig() {
       }
 
       chrome.storage.local.set({ providerConfig: pc }, () => {
+        if (!configAutoSave) return;
         configAutoSave.classList.add('show');
         clearTimeout(autoSaveBadgeTimer);
         autoSaveBadgeTimer = setTimeout(() => {
@@ -486,20 +442,13 @@ temperatureSlider.addEventListener('input', () => {
 });
 maxTokensInput.addEventListener('input', autoSaveConfig);
 responseLanguage.addEventListener('change', autoSaveConfig);
-promptGrammar.addEventListener('input', autoSaveConfig);
-promptStyle.addEventListener('input', autoSaveConfig);
-promptSynonyms.addEventListener('input', autoSaveConfig);
-systemInstruction.addEventListener('input', autoSaveConfig);
+[promptGrammar, promptStyle, promptSynonyms, systemInstruction].forEach((el) => {
+  el?.addEventListener('input', autoSaveConfig);
+});
 if (ollamaBaseUrlInput) {
   ollamaBaseUrlInput.addEventListener('input', autoSaveConfig);
 }
-ACTION_IDS.forEach((actionId) => {
-  const inputs = baseOverrideInputs[actionId];
-  if (!inputs) return;
-  inputs.model.addEventListener('change', autoSaveConfig);
-  inputs.temperature.addEventListener('input', autoSaveConfig);
-  inputs.maxTokens.addEventListener('input', autoSaveConfig);
-});
+
 
 // ============================================================
 // 9. COLLAPSIBLE TEXTAREAS
@@ -514,6 +463,7 @@ document.querySelectorAll('textarea.collapsible').forEach((ta) => {
 
 function expandCollapsibleIfFilled() {
   [promptGrammar, promptStyle, promptSynonyms, systemInstruction].forEach((ta) => {
+    if (!ta) return;
     if (ta.value.trim()) ta.classList.add('expanded');
     else ta.classList.remove('expanded');
   });
@@ -548,11 +498,11 @@ chrome.storage.local.get('providerConfig', ({ providerConfig }) => {
   tempValueDisplay.textContent = temperatureSlider.value;
   maxTokensInput.value = cfg.maxTokens || DEFAULTS.maxTokens;
   responseLanguage.value = cfg.responseLanguage || DEFAULTS.responseLanguage;
-  promptGrammar.value = cfg.promptGrammar || '';
-  promptStyle.value = cfg.promptStyle || '';
-  promptSynonyms.value = cfg.promptSynonyms || '';
-  systemInstruction.value = cfg.systemInstruction || '';
-  setBaseActionOverridesInForm(providerId, cfg.actionOverrides || {});
+  if (promptGrammar) promptGrammar.value = cfg.promptGrammar || '';
+  if (promptStyle) promptStyle.value = cfg.promptStyle || '';
+  if (promptSynonyms) promptSynonyms.value = cfg.promptSynonyms || '';
+  if (systemInstruction) systemInstruction.value = cfg.systemInstruction || '';
+
 
   updateFooter(providerId, cfg.model);
   expandCollapsibleIfFilled();
@@ -564,7 +514,7 @@ chrome.storage.local.get('providerConfig', ({ providerConfig }) => {
 // 11. RESET DEFAULTS
 // ============================================================
 
-resetConfigBtn.addEventListener('click', () => {
+if (resetConfigBtn) resetConfigBtn.addEventListener('click', () => {
   const providerId = providerSelect.value;
   const provider = PROVIDERS[providerId];
 
@@ -573,11 +523,10 @@ resetConfigBtn.addEventListener('click', () => {
   tempValueDisplay.textContent = DEFAULTS.temperature;
   maxTokensInput.value = DEFAULTS.maxTokens;
   responseLanguage.value = DEFAULTS.responseLanguage;
-  promptGrammar.value = '';
-  promptStyle.value = '';
-  promptSynonyms.value = '';
-  systemInstruction.value = '';
-  setBaseActionOverridesInForm(providerId, {});
+  if (promptGrammar) promptGrammar.value = '';
+  if (promptStyle) promptStyle.value = '';
+  if (promptSynonyms) promptSynonyms.value = '';
+  if (systemInstruction) systemInstruction.value = '';
   expandCollapsibleIfFilled();
 
   const resetCfg = {
@@ -589,10 +538,10 @@ resetConfigBtn.addEventListener('click', () => {
     const pc = providerConfig || { activeProvider: providerId };
     if (!pc[providerId]) pc[providerId] = {};
     const savedKey = pc[providerId].apiKey;
-    pc[providerId] = { ...resetCfg, apiKey: savedKey, actionOverrides: {} };
+    pc[providerId] = { ...resetCfg, apiKey: savedKey };
     chrome.storage.local.set({ providerConfig: pc }, () => {
       updateFooter(providerId, provider.defaultModel);
-      showStatus('success', 'Reset to defaults!', configStatusEl);
+      showStatus('success', 'Reset to defaults!', configStatusEl || statusEl);
     });
   });
 });
@@ -609,6 +558,7 @@ const customActionsStatusEl   = document.getElementById('customActionsStatus');
 const ICON_OPTIONS = ['✏️', '🔍', '📝', '💡', '🎯', '📐', '🧩', '🌐', '⚡', '📖', '🛠️', '🔄'];
 
 let customActions = [];
+let customActionsDirty = false;
 
 function generateId() {
   return 'custom_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7);
@@ -621,6 +571,7 @@ function normalizeCustomAction(action) {
     icon: action?.icon || '✏️',
     prompt: String(action?.prompt || ''),
     overrides: {},
+    hidden: action?.hidden === true,
   };
 
   const PROVIDER_KEYS = Object.keys(PROVIDERS);
@@ -650,6 +601,32 @@ function getCustomActionOverride(action, providerId) {
   return override && typeof override === 'object' ? override : {};
 }
 
+function getGlobalActionOverride(providerId) {
+  const provider = PROVIDERS[providerId];
+  const shared = gatherSharedConfig();
+  return {
+    model: shared.model || provider?.defaultModel || '',
+    temperature: Number.isFinite(shared.temperature) ? normalizeTemperature(shared.temperature) : DEFAULTS.temperature,
+    maxTokens: Number.isFinite(shared.maxTokens) ? normalizeMaxTokens(shared.maxTokens) : DEFAULTS.maxTokens,
+  };
+}
+
+function getResolvedCustomActionOverride(action, providerId) {
+  return {
+    ...getGlobalActionOverride(providerId),
+    ...getCustomActionOverride(action, providerId),
+  };
+}
+
+function hasCustomActionOverride(action, providerId) {
+  return Object.keys(getCustomActionOverride(action, providerId)).length > 0;
+}
+
+function getModelLabel(providerId, model) {
+  const provider = PROVIDERS[providerId];
+  return provider?.models.find((entry) => entry.value === model)?.label || model;
+}
+
 function renderActionCards() {
   if (customActions.length === 0) {
     customActionsList.innerHTML = '<div class="empty-state">No custom actions yet. Click the button below to add one.</div>';
@@ -657,12 +634,23 @@ function renderActionCards() {
   }
 
   const providerId = providerSelect.value;
+  const providerLabel = escapeHtmlText(PROVIDERS[providerId].label);
 
-  customActionsList.innerHTML = customActions.map((action, index) => `
-    <div class="custom-action-card" data-index="${index}">
+  customActionsList.innerHTML = customActions.map((action, index) => {
+    const customOverride = getCustomActionOverride(action, providerId);
+    const resolvedOverride = getResolvedCustomActionOverride(action, providerId);
+    const globalOverride = getGlobalActionOverride(providerId);
+    const showCustomState = hasCustomActionOverride(action, providerId);
+    const globalModelLabel = getModelLabel(providerId, globalOverride.model);
+
+    return `
+    <div class="custom-action-card${action.hidden ? ' is-hidden' : ''}" data-index="${index}">
       <div class="card-header">
         <span class="card-number">#${index + 1}</span>
-        <button class="btn-remove" type="button" data-index="${index}">Remove</button>
+        <div class="card-header-actions">
+          <button class="btn-toggle-hidden" type="button" data-index="${index}" aria-label="${action.hidden ? 'Show action in menu' : 'Hide action from menu'}" aria-pressed="${action.hidden}" title="${action.hidden ? 'Show in menu' : 'Hide from menu'}">${action.hidden ? '🙈 Hidden' : '👁️ Visible'}</button>
+          <button class="btn-remove" type="button" data-index="${index}">Remove</button>
+        </div>
       </div>
       <div class="card-fields">
         <div>
@@ -685,39 +673,49 @@ function renderActionCards() {
           <textarea class="action-prompt" placeholder="Write your prompt here. Use {{TEXT}} for the selected text." data-index="${index}">${escapeHtml(action.prompt)}</textarea>
         </div>
         <div>
-          <label>Per-Action Overrides (${PROVIDERS[providerId].label})</label>
-          <div class="override-fields">
-            <div>
-              <label>Model</label>
-              <select class="action-override-model" data-index="${index}">
-                ${buildModelOptions(providerId, getCustomActionOverride(action, providerId).model, true)}
-              </select>
+          <details class="advanced-settings" ${showCustomState ? 'open="open"' : ''}>
+            <summary>
+              Advanced Config (${providerLabel})
+              <span class="advanced-summary-badge">${showCustomState ? 'Custom' : 'Global defaults'}</span>
+            </summary>
+            <div class="advanced-settings-body">
+              <p class="override-hint">These values start from your current global ${providerLabel} settings. Matching values keep using the global configuration.</p>
+              <div class="override-fields">
+                <div>
+                  <label>Model</label>
+                  <select class="action-override-model" data-index="${index}">
+                    ${buildModelOptions(providerId, customOverride.model, true, `Use global model (${globalModelLabel})`)}
+                  </select>
+                </div>
+                <div>
+                  <label>Temperature</label>
+                  <input type="number" class="action-override-temp" data-index="${index}" min="0" max="1" step="0.1" value="${escapeAttrValue(resolvedOverride.temperature)}">
+                </div>
+                <div>
+                  <label>Max Output Tokens</label>
+                  <input type="number" class="action-override-tokens" data-index="${index}" min="100" max="8000" step="100" value="${escapeAttrValue(resolvedOverride.maxTokens)}">
+                </div>
+              </div>
             </div>
-            <div>
-              <label>Temp</label>
-              <input type="number" class="action-override-temp" data-index="${index}" min="0" max="1" step="0.1" placeholder="Global" value="${getCustomActionOverride(action, providerId).temperature ?? ''}">
-            </div>
-            <div>
-              <label>Max Tokens</label>
-              <input type="number" class="action-override-tokens" data-index="${index}" min="100" max="8000" step="100" placeholder="Global" value="${getCustomActionOverride(action, providerId).maxTokens ?? ''}">
-            </div>
-          </div>
+          </details>
         </div>
       </div>
     </div>
-  `).join('');
+  `;
+  }).join('');
 }
 
 function escapeAttr(str) {
-  return str.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return escapeAttrValue(str);
 }
 
 function escapeHtml(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  return escapeHtmlText(str);
 }
 
 function syncCardsToData() {
   const providerId = providerSelect.value;
+  const globalOverride = getGlobalActionOverride(providerId);
   const cards = customActionsList.querySelectorAll('.custom-action-card');
   cards.forEach((card, index) => {
     if (customActions[index]) {
@@ -733,9 +731,19 @@ function syncCardsToData() {
       const maxTokens = parseOptionalNumber(card.querySelector('.action-override-tokens')?.value, 100, 8000);
       const override = {};
 
-      if (model) override.model = model;
-      if (typeof temperature === 'number') override.temperature = Number(temperature.toFixed(2));
-      if (typeof maxTokens === 'number') override.maxTokens = Math.round(maxTokens);
+      if (model && model !== globalOverride.model) override.model = model;
+      if (typeof temperature === 'number') {
+        const normalizedTemperature = normalizeTemperature(temperature);
+        if (normalizedTemperature !== globalOverride.temperature) {
+          override.temperature = normalizedTemperature;
+        }
+      }
+      if (typeof maxTokens === 'number') {
+        const normalizedMaxTokens = normalizeMaxTokens(maxTokens);
+        if (normalizedMaxTokens !== globalOverride.maxTokens) {
+          override.maxTokens = normalizedMaxTokens;
+        }
+      }
 
       if (Object.keys(override).length > 0) {
         customActions[index].overrides[providerId] = override;
@@ -744,11 +752,12 @@ function syncCardsToData() {
       }
     }
   });
+  customActionsDirty = false;
 }
 
 addCustomActionBtn.addEventListener('click', () => {
   syncCardsToData();
-  customActions.push({ id: generateId(), name: '', icon: '✏️', prompt: '', overrides: {} });
+  customActions.push({ id: generateId(), name: '', icon: '✏️', prompt: '', overrides: {}, hidden: false });
   renderActionCards();
   const lastCard = customActionsList.querySelector('.custom-action-card:last-child');
   if (lastCard) lastCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -759,6 +768,14 @@ customActionsList.addEventListener('click', (e) => {
   if (removeBtn) {
     syncCardsToData();
     customActions.splice(parseInt(removeBtn.dataset.index, 10), 1);
+    renderActionCards();
+    return;
+  }
+  const toggleHiddenBtn = e.target.closest('.btn-toggle-hidden');
+  if (toggleHiddenBtn) {
+    syncCardsToData();
+    const index = parseInt(toggleHiddenBtn.dataset.index, 10);
+    customActions[index].hidden = !customActions[index].hidden;
     renderActionCards();
     return;
   }
@@ -794,6 +811,14 @@ customActionsList.addEventListener('click', (e) => {
       }
     );
   }
+});
+
+customActionsList.addEventListener('input', (e) => {
+  if (e.target.closest('.custom-action-card')) customActionsDirty = true;
+});
+
+customActionsList.addEventListener('change', (e) => {
+  if (e.target.closest('.custom-action-card')) customActionsDirty = true;
 });
 
 saveCustomActionsBtn.addEventListener('click', () => {
@@ -989,6 +1014,7 @@ generatorResults.addEventListener('click', (e) => {
       icon:     s.icon  || '✏️',
       prompt:   s.prompt || '',
       overrides: {},
+      hidden: false,
     });
     renderActionCards();
 

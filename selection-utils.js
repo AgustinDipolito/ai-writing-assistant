@@ -87,6 +87,45 @@
     };
   }
 
+  function normalizeSelectionContextEntries(entries) {
+    if (!Array.isArray(entries)) return [];
+
+    return entries
+      .map((entry) => String(entry || '').trim())
+      .filter(Boolean);
+  }
+
+  function appendSelectionContext(entries, nextText, maxEntryLength = Number.MAX_SAFE_INTEGER) {
+    const normalizedEntries = normalizeSelectionContextEntries(entries);
+    const normalizedText = clampText(nextText, maxEntryLength);
+    if (!normalizedText) return normalizedEntries;
+    return [...normalizedEntries, normalizedText];
+  }
+
+  function buildSelectionContext(entries, currentText, maxLength, separator = '\n\n') {
+    const normalizedEntries = normalizeSelectionContextEntries(entries);
+    const normalizedCurrentText = clampText(currentText, maxLength);
+    const parts = normalizedCurrentText ? [...normalizedEntries, normalizedCurrentText] : normalizedEntries;
+    const effectiveMaxLength = Number.isInteger(maxLength) && maxLength > 0 ? maxLength : Number.MAX_SAFE_INTEGER;
+
+    let combined = '';
+    for (const part of parts) {
+      if (!part) continue;
+
+      const prefix = combined ? separator : '';
+      const remaining = effectiveMaxLength - combined.length;
+      if (remaining <= prefix.length) break;
+
+      const available = remaining - prefix.length;
+      const nextPart = part.length > available ? part.slice(0, available) : part;
+      combined += prefix + nextPart;
+
+      if (nextPart.length < part.length) break;
+    }
+
+    return combined;
+  }
+
   function applyInputSelectionSnapshot(snapshot, replacementText) {
     if (!snapshot || !snapshot.target) return false;
 
@@ -120,6 +159,8 @@
     isZeroRect,
     getInputSelection,
     getInputSelectionSnapshot,
+    appendSelectionContext,
+    buildSelectionContext,
     applyInputSelectionSnapshot,
   };
 

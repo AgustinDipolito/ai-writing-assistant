@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "AI Writing Assistant",
     "version": "1.0.0",
-    "description": "Grammar, style, and synonym suggestions powered by Google Gemini. Select text on any page to get instant AI-powered writing help.",
+    "description": "AI writing assistant for any web page. Supports Gemini, OpenAI, Anthropic, OpenRouter, and Ollama. Select text or images for instant AI-powered writing help.",
     "permissions": [
         "activeTab",
         "storage",

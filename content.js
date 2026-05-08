@@ -11,6 +11,10 @@
   window.__aiWritingAssistantLoaded = true;
 
   const MAX_TEXT_LENGTH = 5000;
+  const MAX_PAGE_CONTEXT_TEXT_LENGTH = 4000;
+  const MAX_PAGE_CONTEXT_TITLE_LENGTH = 240;
+  const MAX_PAGE_CONTEXT_URL_LENGTH = 2000;
+  const MAX_CONTEXT_BADGE_COUNT = 9;
   const MENU_OFFSET = 10;
   const STREAM_PORT_NAME = 'ai_stream';
   const SelectionUtils = window.AWASelectionUtils || {
@@ -43,6 +47,8 @@
     copy: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`,
     apply: `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>`,
     stop: `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><rect x="4" y="4" width="16" height="16" rx="2"/></svg>`,
+    add_context: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`,
+    create_action: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
     sparkle: `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0L14.59 8.41L23 11L14.59 13.59L12 22L9.41 13.59L1 11L9.41 8.41L12 0Z"/></svg>`,
     describe_image: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>`,
     extract_text: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="8" y1="10" x2="16" y2="10"/><line x1="8" y1="14" x2="16" y2="14"/></svg>`,
@@ -72,6 +78,10 @@
     .ai-menu-btn:hover { background: #f1f5f9; color: #0f172a; }
     .ai-menu-btn:active { background: #e2e8f0; }
     .ai-menu-btn .icon { display: flex; align-items: center; flex-shrink: 0; }
+    .ai-menu-context-btn { all: unset; position: relative; display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: 6px; cursor: pointer; color: #94a3b8; transition: background 0.15s, color 0.15s; pointer-events: auto; flex-shrink: 0; }
+    .ai-menu-context-btn:hover { background: #f8fafc; color: #475569; }
+    .ai-menu-context-btn:active { background: #e2e8f0; }
+    .ai-menu-context-btn[data-count]:not([data-count=""])::after { content: attr(data-count); position: absolute; top: -3px; right: -3px; min-width: 13px; height: 13px; padding: 0 3px; border-radius: 999px; background: #6366f1; color: #ffffff; font-size: 9px; font-weight: 700; line-height: 13px; text-align: center; }
     .ai-menu-separator { width: 1px; height: 22px; background: #e2e8f0; flex-shrink: 0; }
     .ai-results { all: initial; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; position: fixed; display: none; flex-direction: column; width: 420px; max-width: calc(100vw - 24px); max-height: 60vh; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06); z-index: 2147483647; pointer-events: auto; animation: aiPanelSlideIn 0.2s ease-out; overflow: hidden; }
     @keyframes aiPanelSlideIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
@@ -114,10 +124,45 @@
     .ai-menu-btn.disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
     .ai-result-image { max-width: 100%; border-radius: 8px; display: block; margin: 0 auto; }
     .ai-result-image-wrap { text-align: center; padding: 4px 0; }
+    .ai-menu--setup { flex-direction: column; align-items: stretch; gap: 6px; padding: 12px 14px; min-width: 210px; max-width: 270px; }
+    .ai-setup-title { font-size: 12px; font-weight: 700; color: #374151; }
+    .ai-setup-hint { font-size: 11.5px; color: #64748b; }
+    .ai-setup-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+    .ai-setup-chip { all: unset; display: inline-flex; align-items: center; padding: 4px 9px; border-radius: 6px; font-size: 11.5px; font-weight: 500; background: #f1f5f9; color: #374151; cursor: pointer; transition: background 0.15s; box-sizing: border-box; }
+    .ai-setup-chip:hover { background: #e2e8f0; }
+    .ai-setup-chip:disabled { opacity: 0.5; cursor: not-allowed; }
+    .ai-setup-loading { font-size: 12px; color: #64748b; display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+    .ai-quick-create-form { display: flex; flex-direction: column; gap: 5px; }
+    .ai-quick-create-input { all: unset; border: 1px solid #e2e8f0; border-radius: 6px; padding: 5px 8px; font-size: 12px; font-family: inherit; color: #374151; background: #ffffff; box-sizing: border-box; width: 100%; }
+    .ai-quick-create-input:focus { border-color: #6366f1; outline: 2px solid rgba(99, 102, 241, 0.2); outline-offset: 0; }
+    .ai-quick-create-textarea { resize: vertical; min-height: 56px; line-height: 1.4; }
+    .ai-quick-create-input.error { border-color: #dc2626; }
+    .ai-chat-toggle { all: unset; position: fixed; right: 16px; bottom: 16px; width: 44px; height: 44px; border-radius: 999px; display: flex; align-items: center; justify-content: center; background: #6366f1; color: #ffffff; box-shadow: 0 8px 24px rgba(99, 102, 241, 0.38); cursor: pointer; pointer-events: auto; z-index: 2147483647; transition: transform 0.15s, opacity 0.15s, background 0.15s; font-size: 19px; }
+    .ai-chat-toggle:hover { transform: translateY(-1px); background: #4f46e5; }
+    .ai-chat-toggle[aria-expanded="true"] { opacity: 0; pointer-events: none; transform: scale(0.95); }
+    .ai-chat-sidebar { all: initial; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; position: fixed; right: 16px; bottom: 68px; width: 320px; max-width: calc(100vw - 24px); height: 420px; max-height: calc(100vh - 28px); border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08); display: none; flex-direction: column; overflow: hidden; pointer-events: auto; z-index: 2147483647; }
+    .ai-chat-sidebar.visible { display: flex; animation: aiPanelSlideIn 0.2s ease-out; }
+    .ai-chat-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
+    .ai-chat-title { font-size: 13px; font-weight: 600; color: #0f172a; }
+    .ai-chat-messages { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: #f8fafc; }
+    .ai-chat-message { max-width: 92%; padding: 8px 10px; border-radius: 10px; font-size: 12.8px; line-height: 1.5; word-break: break-word; }
+    .ai-chat-message--user { align-self: flex-end; background: #6366f1; color: #ffffff; border-bottom-right-radius: 5px; }
+    .ai-chat-message--assistant { align-self: flex-start; background: #ffffff; color: #1e293b; border: 1px solid #e2e8f0; border-bottom-left-radius: 5px; }
+    .ai-chat-message--assistant code { font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace; font-size: 12px; background: #f1f5f9; padding: 1px 4px; border-radius: 4px; }
+    .ai-chat-composer { border-top: 1px solid #f1f5f9; padding: 8px; display: flex; gap: 6px; align-items: flex-end; }
+    .ai-chat-input { all: unset; flex: 1; min-height: 34px; max-height: 90px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 7px 8px; font-size: 12.8px; color: #334155; background: #ffffff; line-height: 1.4; }
+    .ai-chat-input:focus { border-color: #6366f1; outline: 2px solid rgba(99, 102, 241, 0.2); outline-offset: 0; }
+    .ai-chat-input:disabled { opacity: 0.7; cursor: not-allowed; background: #f8fafc; }
+    .ai-chat-send { all: unset; height: 34px; min-width: 34px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; padding: 0 10px; background: #6366f1; color: #ffffff; font-size: 12px; font-weight: 600; cursor: pointer; transition: background 0.15s; }
+    .ai-chat-send:hover { background: #4f46e5; }
+    .ai-chat-send:disabled { opacity: 0.5; cursor: not-allowed; pointer-events: none; }
+    .ai-chat-hint { font-size: 11.5px; color: #64748b; text-align: center; padding: 5px; }
+    .ai-chat-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; pointer-events: none; }
 
     @media (prefers-color-scheme: dark) {
       .ai-menu { background: #1e1e2e; border-color: #313244; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35), 0 1px 3px rgba(0, 0, 0, 0.2); }
       .ai-menu-btn { color: #cdd6f4; } .ai-menu-btn:hover { background: #313244; color: #ffffff; } .ai-menu-btn:active { background: #45475a; }
+      .ai-menu-context-btn { color: #a6adc8; } .ai-menu-context-btn:hover { background: #313244; color: #ffffff; } .ai-menu-context-btn:active { background: #45475a; }
       .ai-menu-separator, .ai-results-header { border-color: #313244; }
       .ai-results { background: #1e1e2e; border-color: #313244; box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.25); }
       .ai-results-title { color: #cdd6f4; } .ai-results-title .icon { color: #a5b4fc; }
@@ -130,6 +175,28 @@
       .ai-results-body th { background: #2a2a3a; }
       .ai-results-body a { color: #a5b4fc; }
       .ai-error { color: #f87171; background: #2d1b1b; border-color: #5c2020; }
+      .ai-setup-title { color: #cdd6f4; }
+      .ai-setup-hint { color: #a6adc8; }
+      .ai-setup-chip { background: #313244; color: #cdd6f4; }
+      .ai-setup-chip:hover { background: #45475a; }
+      .ai-setup-loading { color: #a6adc8; }
+      .ai-quick-create-input { background: #1e1e2e; border-color: #45475a; color: #cdd6f4; }
+      .ai-quick-create-input:focus { border-color: #a5b4fc; outline-color: rgba(165, 180, 252, 0.2); }
+      .ai-chat-toggle { background: #818cf8; box-shadow: 0 8px 24px rgba(129, 140, 248, 0.34); }
+      .ai-chat-toggle:hover { background: #6366f1; }
+      .ai-chat-sidebar { background: #1e1e2e; border-color: #313244; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.42), 0 2px 8px rgba(0, 0, 0, 0.24); }
+      .ai-chat-header, .ai-chat-composer { border-color: #313244; }
+      .ai-chat-title { color: #e2e8f0; }
+      .ai-chat-messages { background: #181825; }
+      .ai-chat-message--user { background: #818cf8; color: #0f172a; }
+      .ai-chat-message--assistant { background: #1e1e2e; color: #cdd6f4; border-color: #313244; }
+      .ai-chat-message--assistant code { background: #313244; color: #a5b4fc; }
+      .ai-chat-input { background: #1e1e2e; border-color: #45475a; color: #cdd6f4; }
+      .ai-chat-input:focus { border-color: #a5b4fc; outline-color: rgba(165, 180, 252, 0.2); }
+      .ai-chat-input:disabled { background: #181825; color: #94a3b8; }
+      .ai-chat-send { background: #818cf8; color: #0f172a; }
+      .ai-chat-send:hover { background: #6366f1; color: #ffffff; }
+      .ai-chat-hint { color: #a6adc8; }
     }
   `;
   shadow.appendChild(styleEl);
@@ -155,8 +222,34 @@
     <div class="ai-results-body"></div>
   `;
 
+  const chatToggle = document.createElement('button');
+  chatToggle.className = 'ai-chat-toggle';
+  chatToggle.title = 'Open sidebar chat';
+  chatToggle.setAttribute('aria-label', 'Open sidebar chat');
+  chatToggle.setAttribute('aria-expanded', 'false');
+  chatToggle.textContent = '💬';
+
+  const chatSidebar = document.createElement('div');
+  chatSidebar.className = 'ai-chat-sidebar';
+  chatSidebar.innerHTML = `
+    <div class="ai-chat-header">
+      <div class="ai-chat-title">Sidebar Chat</div>
+      <button class="ai-icon-btn" data-role="chat-minimize" title="Minimize">${ICONS.close}</button>
+    </div>
+    <div class="ai-chat-messages" role="log" aria-live="polite" aria-relevant="additions text">
+      <div class="ai-chat-hint" id="ai-chat-hint-text">Ask anything while you browse.</div>
+    </div>
+    <div class="ai-chat-composer">
+      <textarea class="ai-chat-input" placeholder="Type a message…" rows="1" aria-label="Chat message" aria-describedby="ai-chat-hint-text"></textarea>
+      <button class="ai-chat-send" type="button" aria-label="Send message">Send</button>
+    </div>
+    <div class="ai-chat-sr-only" aria-live="assertive" aria-atomic="true" id="ai-chat-sr-status"></div>
+  `;
+
   shadow.appendChild(menu);
   shadow.appendChild(results);
+  shadow.appendChild(chatToggle);
+  shadow.appendChild(chatSidebar);
 
   const resultsBody = results.querySelector('.ai-results-body');
   const resultsTitleText = results.querySelector('.ai-results-title-text');
@@ -165,6 +258,13 @@
   const applyBtn = results.querySelector('[data-role="apply"]');
   const downloadBtn = results.querySelector('[data-role="download"]');
   const closeBtn = results.querySelector('[data-role="close"]');
+  const chatMessages = chatSidebar.querySelector('.ai-chat-messages');
+  const chatInput = chatSidebar.querySelector('.ai-chat-input');
+  const chatSendBtn = chatSidebar.querySelector('.ai-chat-send');
+  const chatMinimizeBtn = chatSidebar.querySelector('[data-role="chat-minimize"]');
+  const chatHint = chatSidebar.querySelector('.ai-chat-hint');
+  const chatSrStatus = chatSidebar.querySelector('#ai-chat-sr-status');
+  let chatPreviousFocus = null;
 
   let loadedCustomActions = [];
   let selectedText = '';
@@ -176,12 +276,27 @@
   let activeRequestId = null;
   let activeResponseText = '';
   let selectionSnapshotForApply = null;
+  let selectionContextEntries = [];
+  let clearContextAfterRequest = false;
   let lastAnchorRect = null;
   let lastMousePoint = { x: Math.round(window.innerWidth / 2), y: Math.max(48, Math.round(window.innerHeight * 0.12)) };
 
   function isEditableElement(node) {
     if (!(node instanceof Element)) return false;
     return Boolean(node.closest('[contenteditable]:not([contenteditable="false"])'));
+  }
+
+  function isTextInputElement(node) {
+    if (!(node instanceof Element)) return false;
+    const tagName = node.tagName.toUpperCase();
+    return tagName === 'TEXTAREA'
+      || (tagName === 'INPUT' && /^(text|search|url|tel|email|password)$/i.test(node.getAttribute('type') || node.type || 'text'));
+  }
+
+  function isSetupMenuInteractionActive() {
+    if (!menu.classList.contains('ai-menu--setup')) return false;
+    const active = shadow.activeElement;
+    return active instanceof Element && menu.contains(active);
   }
 
   function normalizeSelectionSnapshot(snapshot) {
@@ -229,6 +344,53 @@
     copyToast.textContent = message;
     copyToast.classList.add('show');
     setTimeout(() => copyToast.classList.remove('show'), 1500);
+  }
+
+  function getContextButtonCountLabel() {
+    if (!selectionContextEntries.length) return '';
+    return selectionContextEntries.length > MAX_CONTEXT_BADGE_COUNT ? '9+' : String(selectionContextEntries.length);
+  }
+
+  function getContextButtonTitle() {
+    if (!selectionContextEntries.length) return 'Add to context';
+    const label = selectionContextEntries.length === 1 ? 'fragment' : 'fragments';
+    return `Add to context (${selectionContextEntries.length} saved ${label})`;
+  }
+
+  function clearSelectionContext() {
+    if (!selectionContextEntries.length) return;
+    selectionContextEntries = [];
+    buildMenuButtons();
+  }
+
+  function clearCurrentTextSelection() {
+    const activeElement = document.activeElement;
+
+    if (isTextInputElement(activeElement) && typeof activeElement.setSelectionRange === 'function' && Number.isInteger(activeElement.selectionEnd)) {
+      activeElement.setSelectionRange(activeElement.selectionEnd, activeElement.selectionEnd);
+    }
+
+    try {
+      window.getSelection()?.removeAllRanges();
+    } catch {
+      // no-op
+    }
+  }
+
+  function addCurrentSelectionToContext() {
+    const payload = selectedText ? { text: selectedText } : getSelectionPayload();
+    const text = SelectionUtils.clampText(payload.text || '', MAX_TEXT_LENGTH);
+    if (!text) return;
+
+    selectionContextEntries = SelectionUtils.appendSelectionContext(selectionContextEntries, text, MAX_TEXT_LENGTH);
+    suppressUiUntil = Date.now() + 300;
+    clearCurrentTextSelection();
+    selectedText = '';
+    buildMenuButtons();
+    hideMenu();
+    setToast(selectionContextEntries.length === 1
+      ? 'Added to context'
+      : `Added to context (${selectionContextEntries.length})`);
   }
 
   function applyTextToContentEditable(snapshot, replacementText) {
@@ -330,10 +492,45 @@
     selectedImage = null;
   }
 
+  const SETUP_CATEGORIES = [
+    { category: 'Email & Communication', label: '📧 Email' },
+    { category: 'Writing & Editing', label: '✍️ Writing' },
+    { category: 'Social Media', label: '📱 Social' },
+    { category: 'Business & Productivity', label: '📊 Business' },
+    { category: 'Code & Tech', label: '💻 Code' },
+    { category: 'Academic & Research', label: '🎓 Academic' },
+    { category: 'Marketing & Sales', label: '🛍️ Marketing' },
+    { category: 'HR & Recruiting', label: '👥 HR' },
+    { category: 'Customer Service', label: '🤝 Support' },
+    { category: 'Legal & Compliance', label: '⚖️ Legal' },
+    { category: 'Research & Analysis', label: '🔍 Research' },
+    { category: 'Finance & Data', label: '💰 Finance' },
+    { category: 'Creative Writing', label: '🎨 Creative' },
+    { category: 'Translation & Language', label: '🌍 Translation' },
+    { category: 'Health & Wellness', label: '🏥 Health' },
+  ];
+
+  function buildSetupHtml() {
+    const chips = SETUP_CATEGORIES
+      .map((c) => `<button class="ai-setup-chip" data-category="${escapeAttr(c.category)}">${escapeHtml(c.label)}</button>`)
+      .join('');
+    return `<div class="ai-setup-title">✨ Create your first actions</div><div class="ai-setup-hint">Pick a category to generate 3 actions:</div><div class="ai-setup-chips">${chips}<button class="ai-setup-chip" data-role="quick-create">✏️ Create manually</button></div>`;
+  }
+
+  function buildQuickCreateHtml() {
+    return `<div class="ai-setup-title">✏️ New action</div>`
+      + `<div class="ai-quick-create-form">`
+      + `<input class="ai-quick-create-input" type="text" placeholder="Action name…" data-qc="name" maxlength="50">`
+      + `<textarea class="ai-quick-create-input ai-quick-create-textarea" placeholder="Prompt… (use {{TEXT}} for the selected text)" data-qc="prompt" rows="3"></textarea>`
+      + `<div class="ai-setup-chips"><button class="ai-setup-chip" data-role="qc-save">Save</button><button class="ai-setup-chip" data-role="qc-cancel">Cancel</button></div>`
+      + `</div>`;
+  }
+
   function buildMenuButtons() {
     let html;
 
     if (selectedImage) {
+      menu.classList.remove('ai-menu--setup');
       // Image analysis mode — show image-specific actions.
       const imageButtons = [
         { action: 'describe_image', icon: ICONS.describe_image, label: 'Describe' },
@@ -344,23 +541,21 @@
         `<button class="ai-menu-btn" data-action="${btn.action}"><span class="icon">${btn.icon}</span>${btn.label}</button>`
       ).join('<div class="ai-menu-separator"></div>');
     } else {
-      // Text selection mode — show text actions plus image generation.
-      const defaultButtons = [
-        { action: 'grammar', icon: ICONS.grammar, label: 'Grammar' },
-        { action: 'style', icon: ICONS.style, label: 'Style' },
-        { action: 'synonyms', icon: ICONS.synonyms, label: 'Synonyms' },
-        { action: 'generate_image', icon: ICONS.generate_image, label: 'Generate Image' },
-      ];
+      // Text selection mode — show custom actions only.
+      const visibleCustomActions = loadedCustomActions.filter((ca) => !ca.hidden);
 
-      html = defaultButtons.map((btn) =>
-        `<button class="ai-menu-btn" data-action="${btn.action}"><span class="icon">${btn.icon}</span>${btn.label}</button>`
-      ).join('<div class="ai-menu-separator"></div>');
-
-      if (loadedCustomActions.length > 0) {
-        html += '<div class="ai-menu-separator"></div>';
-        html += loadedCustomActions.map((ca) =>
+      if (visibleCustomActions.length > 0) {
+        menu.classList.remove('ai-menu--setup');
+        const contextButtonTitle = getContextButtonTitle();
+        const contextButton = `<button class="ai-menu-context-btn" data-role="add-context" title="${escapeAttr(contextButtonTitle)}" aria-label="${escapeAttr(contextButtonTitle)}" data-count="${escapeAttr(getContextButtonCountLabel())}">${ICONS.add_context}</button>`;
+        const createButton = `<button class="ai-menu-context-btn" data-role="quick-create" title="Create new action" aria-label="Create new action">${ICONS.create_action}</button>`;
+        const actionButtons = visibleCustomActions.map((ca) =>
           `<button class="ai-menu-btn" data-action="${ca.id}"><span class="icon" style="font-style:normal;">${ca.icon || '✏️'}</span>${escapeHtml(ca.name)}</button>`
         ).join('<div class="ai-menu-separator"></div>');
+        html = `${contextButton}${createButton}<div class="ai-menu-separator"></div>${actionButtons}`;
+      } else {
+        menu.classList.add('ai-menu--setup');
+        html = buildSetupHtml();
       }
     }
 
@@ -379,11 +574,156 @@
     }
   });
 
+  function handleFirstUseSetup(category) {
+    menu.innerHTML = `<div class="ai-setup-title">✨ Generating actions…</div><div class="ai-setup-loading"><div class="ai-loading-dots"><span></span><span></span><span></span></div>${escapeHtml(category)}</div>`;
+
+    chrome.runtime.sendMessage({ type: 'GENERATE_ACTIONS', category }, (response) => {
+      if (chrome.runtime.lastError || response?.error) {
+        const msg = response?.error || chrome.runtime.lastError?.message || 'An error occurred.';
+        menu.innerHTML = `<div class="ai-setup-title">⚠️ Could not generate actions</div><div class="ai-setup-hint">${escapeHtml(msg)}</div><div class="ai-setup-chips"><button class="ai-setup-chip" data-role="open-settings">Open Settings</button><button class="ai-setup-chip" data-category="${escapeAttr(category)}">Try again</button></div>`;
+        return;
+      }
+
+      const suggestions = response?.suggestions || [];
+      if (suggestions.length === 0) {
+        menu.innerHTML = `<div class="ai-setup-title">⚠️ No suggestions returned</div><div class="ai-setup-chips"><button class="ai-setup-chip" data-role="rebuild-setup">Pick another category</button></div>`;
+        return;
+      }
+
+      let counter = 0;
+      const first3 = suggestions.slice(0, 3).map((s) => ({
+        id: 'custom_' + Date.now().toString(36) + '_' + (counter++).toString(36) + '_' + Math.random().toString(36).substring(2, 7),
+        name: s.name || 'Custom Action',
+        icon: s.icon || '✏️',
+        prompt: s.prompt || '',
+        overrides: {},
+        hidden: false,
+      }));
+
+      chrome.storage.local.get('customActions', ({ customActions: existing }) => {
+        const merged = [...(existing || []), ...first3];
+        chrome.storage.local.set({ customActions: merged });
+        // The storage onChanged listener will rebuild the menu automatically.
+      });
+    });
+  }
+
   function escapeHtml(text) {
     return String(text)
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;');
+  }
+
+  function escapeAttr(text) {
+    return escapeHtml(text).replace(/"/g, '&quot;');
+  }
+
+  function sanitizeUserInput(rawText) {
+    return String(rawText || '').trim().slice(0, MAX_TEXT_LENGTH);
+  }
+
+  function setSidebarOpen(open) {
+    if (open) {
+      // Only capture focus if it's within the shadow DOM; otherwise fall back to the toggle.
+      const active = shadow.activeElement;
+      chatPreviousFocus = (active && active !== chatToggle) ? active : null;
+      chatSidebar.classList.add('visible');
+      chatToggle.setAttribute('aria-expanded', 'true');
+      // Defer focus so the browser has a chance to render the newly-visible
+      // sidebar (display: flex is applied via the 'visible' class) before
+      // attempting to focus the input — otherwise focus silently fails.
+      requestAnimationFrame(() => chatInput.focus());
+      return;
+    }
+    chatSidebar.classList.remove('visible');
+    chatToggle.setAttribute('aria-expanded', 'false');
+    // Return focus to the previously focused shadow element, or the toggle as a safe fallback.
+    try {
+      if (chatPreviousFocus && typeof chatPreviousFocus.focus === 'function') {
+        chatPreviousFocus.focus();
+      } else {
+        chatToggle.focus();
+      }
+    } catch {
+      chatToggle.focus();
+    }
+    chatPreviousFocus = null;
+  }
+
+  function scrollChatToBottom() {
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+  }
+
+  function appendChatMessage(role, text) {
+    const safeRole = role === 'assistant' ? 'assistant' : 'user';
+    // Hide the introductory hint once the first message appears and remove the
+    // aria-describedby reference so screen readers are not pointed at hidden text.
+    if (chatHint && chatHint.parentNode) {
+      chatHint.hidden = true;
+      chatInput.removeAttribute('aria-describedby');
+    }
+    const msg = document.createElement('div');
+    msg.className = `ai-chat-message ai-chat-message--${safeRole}`;
+    if (safeRole === 'assistant') {
+      msg.innerHTML = renderSafeMarkdown(String(text || ''));
+    } else {
+      msg.textContent = String(text || '');
+    }
+    chatMessages.appendChild(msg);
+    scrollChatToBottom();
+  }
+
+  function setChatLoading(loading) {
+    chatSendBtn.disabled = loading;
+    chatInput.disabled = loading;
+    if (loading) {
+      chatSendBtn.textContent = '...';
+      return;
+    }
+    chatSendBtn.textContent = 'Send';
+  }
+
+  async function sendSidebarChatMessage() {
+    const text = sanitizeUserInput(chatInput.value);
+    if (!text) {
+      if (chatSrStatus) chatSrStatus.textContent = 'Please type a message before sending.';
+      return;
+    }
+    if (chatSendBtn.disabled) {
+      if (chatSrStatus) chatSrStatus.textContent = 'A response is in progress. Please wait.';
+      return;
+    }
+    if (chatSrStatus) chatSrStatus.textContent = '';
+
+    chatInput.value = '';
+    appendChatMessage('user', text);
+    setChatLoading(true);
+
+    try {
+      const response = await new Promise((resolve, reject) => {
+        chrome.runtime.sendMessage({ type: 'AI_REQUEST', action: 'chat', text }, (res) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message || 'Request failed.'));
+            return;
+          }
+          resolve(res || {});
+        });
+      });
+
+      if (response.error) {
+        throw new Error(response.error);
+      }
+
+      appendChatMessage('assistant', response.result || 'No response received.');
+    } catch (err) {
+      appendChatMessage('assistant', `⚠️ ${err.message || 'Unable to send message. Please check your API settings in extension options.'}`);
+    } finally {
+      setChatLoading(false);
+      // Defer focus so the browser processes the disabled→enabled transition
+      // before we attempt to focus the input.
+      requestAnimationFrame(() => chatInput.focus());
+    }
   }
 
   function sanitizeRenderedHtml(inputHtml) {
@@ -721,6 +1061,55 @@
     return { text: '', rect: null };
   }
 
+  function collectPageTextExcerpt(maxLength) {
+    const limit = Number.isInteger(maxLength) && maxLength > 0 ? maxLength : MAX_PAGE_CONTEXT_TEXT_LENGTH;
+    const root = document.querySelector('main, article, [role="main"]') || document.body;
+    if (!root) return '';
+
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+      acceptNode(node) {
+        const parent = node?.parentElement;
+        if (!parent) return NodeFilter.FILTER_REJECT;
+        if (/^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/i.test(parent.tagName)) return NodeFilter.FILTER_REJECT;
+        if (!String(node.nodeValue || '').trim()) return NodeFilter.FILTER_REJECT;
+        return NodeFilter.FILTER_ACCEPT;
+      },
+    });
+
+    let excerpt = '';
+    while (walker.nextNode() && excerpt.length < limit) {
+      const chunk = String(walker.currentNode.nodeValue || '').replace(/\s+/g, ' ').trim();
+      if (!chunk) continue;
+
+      const prefix = excerpt ? ' ' : '';
+      const remaining = limit - excerpt.length - prefix.length;
+      if (remaining <= 0) break;
+
+      excerpt += prefix + (chunk.length > remaining ? chunk.slice(0, remaining) : chunk);
+    }
+
+    return excerpt.trim();
+  }
+
+  function getSafePageUrl(maxLength) {
+    try {
+      const currentUrl = new URL(window.location.href);
+      return SelectionUtils.clampText(`${currentUrl.origin}${currentUrl.pathname}` || '', maxLength);
+    } catch {
+      return '';
+    }
+  }
+
+  function buildPageContextPayload() {
+    const title = SelectionUtils.clampText(document.title || '', MAX_PAGE_CONTEXT_TITLE_LENGTH);
+    const url = getSafePageUrl(MAX_PAGE_CONTEXT_URL_LENGTH);
+    const visibleText = collectPageTextExcerpt(MAX_PAGE_CONTEXT_TEXT_LENGTH);
+
+    if (!title && !url && !visibleText) return null;
+
+    return { title, url, visibleText };
+  }
+
   function hasActiveSelectionText() {
     return getSelectionPayload().text.length > 1;
   }
@@ -743,10 +1132,12 @@
 
   function hideMenu() {
     menu.classList.remove('visible');
+    menu.style.display = '';
   }
 
   function hideResults() {
     results.classList.remove('visible');
+    results.style.display = '';
     resultsBody.innerHTML = '';
     updateApplyButtonState();
   }
@@ -756,22 +1147,25 @@
     clearImageSelection();
     buildMenuButtons();
 
-    // While loading or results are on screen, only close the floating menu.
-    // Never wipe the results panel or cancel the stream from a background event.
-    if (isLoading || results.classList.contains('visible')) {
+    // While a stream is loading, only close the floating menu so we don't
+    // cancel the active request from a background event.
+    if (isLoading) {
       hideMenu();
       return;
     }
 
-    hideAll();
+    hideAll({ preserveContext: true });
   }
 
-  function hideAll() {
+  function hideAll({ preserveContext = false } = {}) {
     selectedText = '';
     suppressUiUntil = Date.now() + 300;
     try { window.getSelection()?.removeAllRanges(); } catch { /* no-op */ }
     cancelActiveStream();
     clearImageSelection();
+    if (!preserveContext) {
+      clearSelectionContext();
+    }
     buildMenuButtons();
     hideMenu();
     hideResults();
@@ -782,6 +1176,7 @@
     downloadBtn.dataset.href = '';
     selectionSnapshotForApply = null;
     activeResponseText = '';
+    clearContextAfterRequest = false;
     updateApplyButtonState();
     lastAnchorRect = null;
   }
@@ -944,6 +1339,10 @@
         setButtonsDisabled(false);
         activeRequestId = null;
         stopBtn.style.display = 'none';
+        if (clearContextAfterRequest) {
+          clearSelectionContext();
+          clearContextAfterRequest = false;
+        }
         updateApplyButtonState();
         return;
       }
@@ -955,6 +1354,10 @@
         setButtonsDisabled(false);
         activeRequestId = null;
         stopBtn.style.display = 'none';
+        if (clearContextAfterRequest) {
+          clearSelectionContext();
+          clearContextAfterRequest = false;
+        }
         updateApplyButtonState();
         return;
       }
@@ -966,6 +1369,10 @@
         setButtonsDisabled(false);
         activeRequestId = null;
         stopBtn.style.display = 'none';
+        if (clearContextAfterRequest) {
+          clearSelectionContext();
+          clearContextAfterRequest = false;
+        }
         updateApplyButtonState();
       }
     });
@@ -977,6 +1384,10 @@
         isLoading = false;
         setButtonsDisabled(false);
         activeRequestId = null;
+        if (clearContextAfterRequest) {
+          clearSelectionContext();
+          clearContextAfterRequest = false;
+        }
         updateApplyButtonState();
       }
     });
@@ -1005,9 +1416,18 @@
     updateApplyButtonState();
   }
 
+  /**
+   * Sends the current action request.
+   * When buffered context is used, "Apply" is disabled because the output no longer maps to one replaceable range.
+   */
   async function requestAI(action, textOverride, anchorRectOverride) {
-    const text = (textOverride || selectedText || '').trim();
     const isImageAnalysis = IMAGE_ANALYSIS_ACTIONS.has(action);
+    const requestedText = textOverride || selectedText || '';
+    const baseText = SelectionUtils.clampText(requestedText, MAX_TEXT_LENGTH);
+    const usesSelectionContext = !isImageAnalysis && selectionContextEntries.length > 0;
+    const text = usesSelectionContext
+      ? SelectionUtils.buildSelectionContext(selectionContextEntries, baseText, MAX_TEXT_LENGTH)
+      : baseText;
 
     // Image analysis actions need a selected image; all others need text.
     if (isImageAnalysis && !selectedImage) return;
@@ -1020,7 +1440,10 @@
     isLoading = true;
     setButtonsDisabled(true);
     activeResponseText = '';
-    selectionSnapshotForApply = captureSelectionSnapshot();
+    selectionSnapshotForApply = usesSelectionContext
+      ? null // Disable "Apply" because combined context spans multiple original selections.
+      : captureSelectionSnapshot();
+    clearContextAfterRequest = usesSelectionContext;
     updateApplyButtonState();
 
     // Capture the anchor rect BEFORE hiding the menu (hidden elements return zero rect).
@@ -1039,6 +1462,10 @@
       const requestId = generateRequestId();
       activeRequestId = requestId;
       const imageData = selectedImage || undefined;
+      const shouldIncludePageContext = action !== 'generate_image';
+      const pageContext = shouldIncludePageContext
+        ? (buildPageContextPayload() || undefined)
+        : undefined;
       console.log('[AWA] sending AI_STREAM_START', requestId, action, 'text len', text.length, 'has image', Boolean(imageData));
       port.postMessage({
         type: 'AI_STREAM_START',
@@ -1046,6 +1473,7 @@
         action,
         text,
         imageData,
+        pageContext,
       });
     } catch (err) {
       showError('Extension error: ' + (err.message || 'Unknown error'));
@@ -1102,15 +1530,79 @@
     if (Date.now() < suppressUiUntil) return;
     if (isLoading) return;
     if (results.classList.contains('visible')) return;
+    if (isSetupMenuInteractionActive()) return;
     hideMenuWhenSelectionMissing();
   });
 
   menu.addEventListener('click', (e) => {
-    const button = getClickedButton(e, '.ai-menu-btn');
-    if (!button || button.classList.contains('disabled')) return;
+    const contextButton = getClickedButton(e, '.ai-menu-context-btn');
+    if (contextButton) {
+      const role = contextButton.dataset.role;
+      if (role === 'quick-create') {
+        menu.classList.add('ai-menu--setup');
+        menu.innerHTML = buildQuickCreateHtml();
+        menu.querySelector('[data-qc="name"]')?.focus();
+      } else {
+        addCurrentSelectionToContext();
+      }
+      return;
+    }
 
-    const action = button.dataset.action;
-    if (action) requestAI(action);
+    const button = getClickedButton(e, '.ai-menu-btn');
+    if (button && !button.classList.contains('disabled')) {
+      const action = button.dataset.action;
+      if (action) requestAI(action);
+      return;
+    }
+
+    const setupChip = getClickedButton(e, '.ai-setup-chip');
+    if (setupChip && !setupChip.disabled) {
+      const category = setupChip.dataset.category;
+      const role = setupChip.dataset.role;
+      if (category) {
+        handleFirstUseSetup(category);
+      } else if (role === 'open-settings') {
+        chrome.runtime.sendMessage({ type: 'OPEN_OPTIONS' });
+        hideMenu();
+      } else if (role === 'rebuild-setup') {
+        menu.innerHTML = buildSetupHtml();
+      } else if (role === 'quick-create') {
+        menu.classList.add('ai-menu--setup');
+        menu.innerHTML = buildQuickCreateHtml();
+        menu.querySelector('[data-qc="name"]')?.focus();
+      } else if (role === 'qc-cancel') {
+        buildMenuButtons();
+      } else if (role === 'qc-save') {
+        const nameInput = menu.querySelector('[data-qc="name"]');
+        const promptInput = menu.querySelector('[data-qc="prompt"]');
+        const name = nameInput?.value.trim() || '';
+        const prompt = promptInput?.value.trim() || '';
+        if (!name) {
+          nameInput?.classList.add('error');
+          nameInput?.focus();
+          return;
+        }
+        if (!prompt) {
+          promptInput?.classList.add('error');
+          promptInput?.focus();
+          return;
+        }
+        const newAction = {
+          id: 'custom_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7),
+          name,
+          icon: '✏️',
+          prompt,
+          overrides: {},
+          hidden: false,
+        };
+        chrome.storage.local.get('customActions', ({ customActions: existing }) => {
+          chrome.storage.local.set({ customActions: [...(existing || []), newAction] }, () => {
+            // The storage onChanged listener will rebuild the menu automatically.
+            hideMenu();
+          });
+        });
+      }
+    }
   });
 
   results.addEventListener('click', (e) => {
@@ -1128,6 +1620,10 @@
     if (role === 'stop') {
       cancelActiveStream();
       stopBtn.style.display = 'none';
+      if (clearContextAfterRequest) {
+        clearSelectionContext();
+        clearContextAfterRequest = false;
+      }
       // Keep the partial response visible
       if (activeResponseText) {
         showResultContent('', activeResponseText);
@@ -1171,17 +1667,10 @@
     // Never close via mousedown while a request is loading.
     if (isLoading) return;
 
-    // Clicking anywhere outside should immediately dismiss action buttons.
-    // If the user keeps a valid selection, mouseup/selectionchange can re-open it.
-    hideMenu();
-
-    if (results.classList.contains('visible') || menu.classList.contains('visible')) {
-      setTimeout(() => {
-        if (!hasActiveSelectionText()) {
-          clearSelectionUi();
-        }
-      }, 150);
-    }
+    // Clicking anywhere outside closes the entire UI.
+    // suppressUiUntil prevents mouseup from immediately re-opening the menu
+    // for the same click, while still allowing new selections afterwards.
+    hideAll({ preserveContext: true });
   });
 
   document.addEventListener('keydown', (e) => {
@@ -1193,6 +1682,26 @@
   closeBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     hideAll();
+  });
+
+  chatToggle.addEventListener('click', () => {
+    setSidebarOpen(true);
+  });
+
+  chatMinimizeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setSidebarOpen(false);
+  });
+
+  chatSendBtn.addEventListener('click', () => {
+    sendSidebarChatMessage();
+  });
+
+  chatInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendSidebarChatMessage();
+    }
   });
 
   // Hide the floating menu whenever the page is scrolled.  The results panel
@@ -1224,12 +1733,14 @@
   function handleFocusLoss() {
     suppressUiUntil = Date.now() + 250;
     selectedText = '';
-    hideMenu();
 
-    // Keep active streams/results alive across focus changes so responses can finish.
-    if (!isLoading && !results.classList.contains('visible')) {
-      hideAll();
+    // Keep the stream alive while loading, but close everything else.
+    if (isLoading) {
+      hideMenu();
+      return;
     }
+
+    hideAll();
   }
 
   window.addEventListener('blur', () => {
@@ -1254,6 +1765,7 @@
     selectionChangeTimer = setTimeout(() => {
       if (Date.now() < suppressUiUntil) return;
       if (!menu.classList.contains('visible') && !results.classList.contains('visible')) return;
+      if (isSetupMenuInteractionActive()) return;
 
       if (isLoading) {
         hideMenu();
@@ -1262,7 +1774,7 @@
 
       hideMenuWhenSelectionMissing();
 
-      if (!hasActiveSelectionText() && !results.classList.contains('visible')) {
+      if (!hasActiveSelectionText()) {
         clearSelectionUi();
       }
     }, 250);

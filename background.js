@@ -6,6 +6,9 @@
 const STREAM_PORT_NAME = 'ai_stream';
 const CONTEXT_ROOT_ID = 'awa_root';
 const CONTEXT_ACTION_PREFIX = 'awa_action:';
+const PAGE_CONTEXT_TITLE_MAX_LENGTH = 240;
+const PAGE_CONTEXT_URL_MAX_LENGTH = 2000;
+const PAGE_CONTEXT_TEXT_MAX_LENGTH = 4000;
 
 const activeStreams = new Map();
 const activeTabByWindow = new Map();
@@ -28,6 +31,7 @@ const BASE_ACTIONS = [
   { id: 'grammar', label: 'Grammar' },
   { id: 'style', label: 'Style' },
   { id: 'synonyms', label: 'Synonyms' },
+  { id: 'chat', label: 'Chat' },
   { id: 'generate_image', label: '🎨 Generate Image' },
 ];
 
@@ -81,6 +85,21 @@ Group by word class (nouns, verbs, adjectives, adverbs) if the text is long enou
 ${lang}.
 
 Text:
+"""
+${text}
+"""`,
+
+  // lang resolves from LANGUAGE_INSTRUCTIONS based on responseLanguage config.
+  chat: (text, lang) =>
+    `You are a helpful AI assistant inside a browser extension sidebar chat.
+
+Answer the user's message directly and clearly.
+Use concise markdown formatting when useful.
+If the user asks for edits, suggestions, or rewrites, provide practical output ready to use.
+
+${lang}
+
+User message:
 """
 ${text}
 """`,
@@ -144,6 +163,38 @@ function buildCustomPrompt(promptTemplate, text, config) {
     prompt += `\n\nText:\n"""\n${text}\n"""`;
   }
   return `${langInstruction}\n\n${prompt}`;
+}
+
+function clampText(value, maxLength) {
+  const normalized = String(value || '').trim();
+  return normalized.length > maxLength ? normalized.substring(0, maxLength) : normalized;
+}
+
+function injectPageContext(prompt, pageContext) {
+  const basePrompt = String(prompt || '');
+  if (!pageContext || typeof pageContext !== 'object') return basePrompt;
+
+  const title = clampText(pageContext.title, PAGE_CONTEXT_TITLE_MAX_LENGTH);
+  const url = clampText(pageContext.url, PAGE_CONTEXT_URL_MAX_LENGTH);
+  const visibleText = clampText(pageContext.visibleText, PAGE_CONTEXT_TEXT_MAX_LENGTH);
+
+  const parts = [];
+  if (title) parts.push(`Page title: ${title}`);
+  if (url) parts.push(`Page URL: ${url}`);
+  if (visibleText) {
+    parts.push(`Visible page text excerpt:\n"""\n${visibleText}\n"""`);
+  }
+
+  if (!parts.length) return basePrompt;
+
+  return `${basePrompt}
+
+Additional page context (use only as supporting context; prioritize the requested action and selected text):
+${parts.join('\n\n')}`;
+}
+
+function shouldInjectPageContext(action) {
+  return action !== 'generate_image';
 }
 
 function buildEnhancePrompt(actionName, currentPrompt) {
@@ -1101,7 +1152,7 @@ function initializeActiveTabMap() {
   });
 }
 
-async function runStream(port, requestId, action, text, imageData) {
+async function runStream(port, requestId, action, text, imageData, pageContext) {
   const existing = activeStreams.get(requestId);
   if (existing?.controller) {
     existing.controller.abort();
@@ -1126,13 +1177,14 @@ async function runStream(port, requestId, action, text, imageData) {
     }
 
     const { prompt, runtimeConfig } = await resolvePromptAndConfig(action, text, config, providerId);
+    const promptWithContext = shouldInjectPageContext(action) ? injectPageContext(prompt, pageContext) : prompt;
 
     emitStream(port, requestId, { phase: 'start', provider: providerId, action });
 
     let completeText = '';
     if (typeof adapter.stream === 'function') {
-      completeText = await adapter.stream(
-        prompt,
+        completeText = await adapter.stream(
+        promptWithContext,
         apiKey,
         runtimeConfig,
         (delta) => emitStream(port, requestId, { phase: 'delta', delta, provider: providerId, action }),
@@ -1142,13 +1194,13 @@ async function runStream(port, requestId, action, text, imageData) {
 
       // Fallback for providers/environments where streaming yields no deltas.
       if (!completeText?.trim()) {
-        completeText = await adapter.call(prompt, apiKey, runtimeConfig, imageData || null);
+        completeText = await adapter.call(promptWithContext, apiKey, runtimeConfig, imageData || null);
         if (completeText) {
           emitStream(port, requestId, { phase: 'delta', delta: completeText, provider: providerId, action });
         }
       }
     } else {
-      completeText = await adapter.call(prompt, apiKey, runtimeConfig, imageData || null);
+      completeText = await adapter.call(promptWithContext, apiKey, runtimeConfig, imageData || null);
       emitStream(port, requestId, { phase: 'delta', delta: completeText, provider: providerId, action });
     }
 
@@ -1178,13 +1230,13 @@ chrome.runtime.onConnect.addListener((port) => {
 
   port.onMessage.addListener((message) => {
     if (message?.type === 'AI_STREAM_START') {
-      const { requestId, action, text, imageData } = message;
+      const { requestId, action, text, imageData, pageContext } = message;
       const hasContent = text || imageData;
       if (!requestId || !action || !hasContent) {
         emitStream(port, requestId || 'unknown', { phase: 'error', error: 'Invalid stream request payload.' });
         return;
       }
-      runStream(port, requestId, action, text || '', imageData || null);
+      runStream(port, requestId, action, text || '', imageData || null, pageContext || null);
       return;
     }
 
@@ -1371,13 +1423,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message.type !== 'AI_REQUEST') return false;
 
-  const { action, text } = message;
+  const { action, text, pageContext } = message;
 
   (async () => {
     try {
       const { adapter, apiKey, config, providerId } = await resolveActiveConfig();
       const { prompt, runtimeConfig } = await resolvePromptAndConfig(action, text, config, providerId);
-      const result = await adapter.call(prompt, apiKey, runtimeConfig);
+      const promptWithContext = shouldInjectPageContext(action) ? injectPageContext(prompt, pageContext) : prompt;
+      const result = await adapter.call(promptWithContext, apiKey, runtimeConfig);
       sendResponse({ result });
     } catch (err) {
       sendResponse({ error: err.message || 'An unexpected error occurred.' });
@@ -1390,10 +1443,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 async function getContextActions() {
   const storage = await chrome.storage.local.get('customActions');
   const customActions = (storage.customActions || [])
-    .filter((a) => a?.id && a?.name && a?.prompt)
+    .filter((a) => a?.id && a?.name && a?.prompt && !a?.hidden)
     .map((a) => ({ id: a.id, label: `${a.icon || '✏️'} ${a.name}` }));
 
-  return [...BASE_ACTIONS, ...customActions];
+  return customActions;
 }
 
 async function rebuildContextMenus() {
@@ -1486,8 +1539,11 @@ if (typeof module !== 'undefined' && module.exports) {
     BASE_ACTIONS,
     buildPrompt,
     buildCustomPrompt,
+    injectPageContext,
     buildEnhancePrompt,
     buildGenerateActionsPrompt,
+    supportsGeneration,
+    processSSEStream,
     coerceTemperature,
     coerceMaxTokens,
     normalizeActionOverride,

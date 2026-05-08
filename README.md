@@ -1,12 +1,12 @@
 # AI Writing Assistant
 
-A Chrome extension that brings AI writing help to every web page. Select text or use the right-click context menu to send it to Gemini or OpenAI and view the response in an in-page results panel. The extension is built with an adapter-based architecture that can be extended to support more providers over time.
+A Chrome extension that brings AI writing help to every web page. Select text or use the right-click context menu to send it to any AI provider — Gemini, OpenAI, Anthropic, OpenRouter, or Ollama — and view the response in an in-page results panel. The extension ships with five provider adapters out of the box and can be extended with more.
 
 ---
 
 ## Overview
 
-Select text anywhere in Chrome. A small floating menu appears. Choose an action — grammar check, style improvement, synonym lookup, or any custom action you have defined. The result streams into a panel in real time. Copy it, apply it directly to the original field, or dismiss and keep browsing.
+Select text anywhere in Chrome. A small floating menu appears. Choose an action — grammar check, style improvement, synonym lookup, image generation, or any custom action you have defined. The result streams into a panel in real time. Copy it, apply it directly to the original field, or dismiss and keep browsing. Click on any image to trigger image analysis actions (describe, extract text, or analyze).
 
 No backend, no data collection. Every API call goes directly from your browser to the provider you choose.
 
@@ -24,13 +24,17 @@ No backend, no data collection. Every API call goes directly from your browser t
 - Light and dark themes follow the system `prefers-color-scheme`.
 - All configuration stored locally with `chrome.storage.local`.
 
-### Built-in actions
+### Examples actions
 
-| Action   | What it does                                                        |
-|----------|---------------------------------------------------------------------|
-| Grammar  | Identifies errors, explains each one, and provides the correction.  |
-| Style    | Evaluates clarity, conciseness, tone, readability, and word choice. |
-| Synonyms | Lists 2-4 synonyms for every significant word in the selection.     |
+| Action         | What it does                                                                              |
+|----------------|-------------------------------------------------------------------------------------------|
+| Grammar        | Identifies errors, explains each one, and provides the correction.                        |
+| Style          | Evaluates clarity, conciseness, tone, readability, and word choice.                       |
+| Synonyms       | Lists 2-4 synonyms for every significant word in the selection.                           |
+| Generate Image | Creates an image from the selected text used as a prompt (Gemini only).                   |
+| Describe Image | Describes an image's subjects, colors, composition, and any visible text (image click).   |
+| Extract Text   | Transcribes all text visible in a clicked image, preserving layout and structure.         |
+| Analyze Image  | Analyzes a clicked image for content, context, details, and visual composition.           |
 
 ---
 
@@ -56,13 +60,16 @@ The extension installs immediately. No build step or dependencies are required.
 ## Setup
 
 1. Open the extension options (click the extension icon and choose Options, or right-click the icon and select **Options**).
-2. Select your provider (Gemini or OpenAI).
-3. Paste the API key for that provider.
+2. Select your provider (Gemini, OpenAI, Anthropic, OpenRouter, or Ollama).
+3. Paste the API key for that provider. Ollama does not require an API key — configure the base URL of your local server instead.
 4. Click **Save**, then **Test Connection** to verify.
 
 Get your API key:
 - Gemini: https://aistudio.google.com/app/apikey
 - OpenAI: https://platform.openai.com/api-keys
+- Anthropic: https://console.anthropic.com/settings/keys
+- OpenRouter: https://openrouter.ai/keys
+- Ollama: no key required — install Ollama and run a model locally (https://ollama.com)
 
 ### Google Account (optional)
 
@@ -107,17 +114,12 @@ All settings are available in the Options page.
 
 | Setting            | Description                                                                 |
 |--------------------|-----------------------------------------------------------------------------|
-| Provider           | Active AI provider: Gemini or OpenAI.                                       |
+| Provider           | Active AI provider: Gemini, OpenAI, Anthropic, OpenRouter, or Ollama.       |
 | Model              | Model to use for the selected provider.                                     |
 | Temperature        | Controls response creativity (0 = deterministic, 1 = most varied).         |
 | Max tokens         | Maximum length of the response.                                             |
 | Response language  | Force a specific output language, or auto-detect from the input text.       |
 | System instruction | A global instruction prepended to every request.                            |
-| Action prompts     | Override the default prompt for Grammar, Style, or Synonyms individually.  |
-
-### Per-action overrides
-
-Each built-in action (Grammar, Style, Synonyms) can override the model, temperature, and max tokens independently of the global setting.
 
 ### Custom actions
 
@@ -152,8 +154,11 @@ This section covers internals relevant to contributors or anyone extending the e
 
 - Chrome Extension Manifest V3
 - Plain JavaScript, no build step, no external runtime dependencies
-- Google Gemini API (`generateContent`, `streamGenerateContent`)
-- OpenAI Chat Completions API (standard and streaming)
+- Google Gemini API (`generateContent`, `streamGenerateContent`, image generation)
+- OpenAI Chat Completions API (standard and streaming, vision-capable models)
+- Anthropic Messages API (standard and streaming)
+- OpenRouter API (meta-adapter providing 100+ models, standard and streaming)
+- Ollama REST API (local and self-hosted models, standard and streaming)
 
 ### Project structure
 
@@ -166,7 +171,8 @@ ai-writing-assistant/
 ├── options.html         # Options page markup
 ├── options.js           # Options page logic: form state, provider switching, connection test
 ├── icons/               # Extension icons at 16, 48, and 128 px
-└── tests/               # Node.js unit tests (built-in test runner)
+├── tests/               # Node.js unit tests (built-in test runner)
+└── product-strategy/    # Strategic planning documents (roadmap, personas, experimental actions)
 ```
 
 ### Architecture
@@ -195,7 +201,7 @@ Configuration is stored under the key `providerConfig` in `chrome.storage.local`
   activeProvider: 'gemini' | 'openai',
   gemini: {
     apiKey, model, temperature, maxTokens,
-    responseLanguage, promptGrammar, promptStyle, promptSynonyms,
+    responseLanguage,
     systemInstruction,
     actionOverrides: {
       grammar:  { model, temperature, maxTokens },
@@ -255,37 +261,55 @@ Tests use Node's built-in test runner. The test suite covers the shared selectio
 | `contextMenus`                      | Register the right-click submenu entries.             |
 | `generativelanguage.googleapis.com` | Gemini API calls.                                     |
 | `api.openai.com`                    | OpenAI API calls.                                     |
+| `api.anthropic.com`                 | Anthropic API calls.                                  |
+| `openrouter.ai`                     | OpenRouter API calls.                                 |
+| `localhost`, `127.0.0.1`            | Ollama local model server calls.                      |
 
 ---
 
 ## Roadmap
 
-The roadmap is organized around a single goal: **make LLMs and AI agents accessible on every web page**, regardless of provider, model, or workflow.
+The roadmap is organized around a single goal: **make LLMs and AI agents accessible on every web page**, regardless of provider, model, or workflow. See [`product-strategy/roadmap-validation.md`](product-strategy/roadmap-validation.md) for the full 18-month investor-facing plan.
 
-### Tier 1 — Universal LLM Access
+### Completed ✅
 
 | Feature | Description |
 |---|---|
-| **Multi-provider router** | Add Anthropic Claude, OpenRouter (meta-adapter for 100+ models), and Ollama for local/self-hosted models. One extension, any LLM. |
-| **Sidebar chat** | Persistent side panel for freeform conversation with any model while browsing. Page content is available as context automatically. |
-| **Page-aware context** | Inject the visible page (or a selection of it) into every prompt so the LLM understands what the user is looking at — summaries, Q&A, and data extraction become one-click actions. |
+| **Multi-provider router** | Gemini, OpenAI, Anthropic, OpenRouter, and Ollama — one extension, any LLM. |
+| **Streaming responses** | Token-by-token streaming via SSE for all providers. |
+| **Apply in place** | Direct text replacement in `<input>`, `<textarea>`, and `contenteditable` elements. |
+| **Context menu** | Right-click submenu for every action on any page. |
+| **Custom actions** | User-defined prompt library with per-action model and parameter overrides. |
+| **Image generation** | Create images from selected text as a prompt (Gemini). |
+| **Image analysis** | Describe, extract text from, or fully analyze any image on any page. |
+| **Page-aware context** | Injects page title, URL, and visible page text excerpt into prompts for better on-page grounding. |
 
-### Tier 2 — Agentic Workflows
+### Phase 1 — Foundation for Scale
+
+| Feature | Description |
+|---|---|
+| **Sidebar chat** | Persistent side panel for freeform conversation with any model while browsing. Page content is available as context automatically. |
+| **Session history** | In-panel drawer to revisit recent results and conversations within a browser session. |
+| **Keyboard shortcuts** | Trigger any action via configurable hotkeys. |
+| **Onboarding flow** | Guided setup to reduce API key configuration abandonment. |
+
+### Phase 2 — Agentic Workflows
 
 | Feature | Description |
 |---|---|
 | **Agent mode** | Define multi-step workflows (chains) that run sequentially or branch on LLM output. Example: _"Extract emails → draft a reply for each → copy to clipboard."_ |
+| **Action marketplace** | Publish, share, and install community-created actions and workflows from a public directory. |
 | **Web actions library** | Prebuilt page-level actions: _Summarize page_, _Extract structured data_, _Translate_, _Explain like I'm five_, _Compare with clipboard_. |
 | **Cross-tab context** | Let agents pull context from multiple open tabs so workflows can span sites (e.g., compare two product pages). |
-| **Model Context Protocol (MCP) integration** | Connect to external tools and data sources via MCP, turning the browser into a full agent runtime. |
+| **Developer SDK** | JavaScript API that lets any web page interact with the extension's LLM layer — sites can offer "Ask AI" features without shipping their own integration. |
 
-### Tier 3 — Platform & Ecosystem
+### Phase 3 — Platform & Enterprise
 
 | Feature | Description |
 |---|---|
-| **Action marketplace** | Publish, share, and install community-created actions and agent workflows from a public directory. |
-| **Developer SDK** | JavaScript API that lets any web page interact with the extension's LLM layer — sites can offer "Ask AI" features without shipping their own integration. |
-| **Session history** | In-panel drawer to revisit recent results and conversations within a browser session. |
+| **Enterprise edition** | Team workspace, SSO, admin controls, usage analytics, and centralized billing. |
+| **Model Context Protocol (MCP) integration** | Connect to external tools and data sources via MCP, turning the browser into a full agent runtime. |
+| **Mobile support** | iOS Safari and Chrome Android extensions. |
 | **Export / Import** | Serialize and restore the full configuration (actions, workflows, preferences) as a portable JSON file. |
 | **Keyboard-first UX** | Full keyboard navigation and customizable shortcuts for every action to support power users. |
 
