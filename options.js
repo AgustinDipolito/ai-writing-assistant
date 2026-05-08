@@ -880,6 +880,7 @@ function updateAuthUI(user) {
     accountAvatarPlaceholder.textContent = '?';
   }
   accountStatusMsg.textContent = '';
+  accountStatusMsg.style.color = '';
 }
 
 function loadAuthState() {

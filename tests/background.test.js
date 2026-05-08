@@ -53,6 +53,9 @@ const {
   anthropicAdapter,
   openrouterAdapter,
   ollamaAdapter,
+  handleGoogleSignIn,
+  handleGoogleSignOut,
+  handleGetAuthState,
 } = require('../background.js');
 
 // ============================================================
@@ -1863,4 +1866,220 @@ test('processSSEStream throws AbortError when signal is already aborted', async 
       return true;
     }
   );
+});
+
+// ============================================================
+// GOOGLE AUTH HANDLERS
+// ============================================================
+
+test('handleGoogleSignIn returns error when client_id placeholder is set', () => {
+  const original = global.chrome.runtime.getManifest;
+  global.chrome.runtime.getManifest = () => ({ oauth2: { client_id: 'YOUR_GOOGLE_OAUTH_CLIENT_ID.apps.googleusercontent.com' } });
+
+  const responses = [];
+  const result = handleGoogleSignIn((r) => responses.push(r));
+
+  assert.equal(result, false);
+  assert.equal(responses.length, 1);
+  assert.ok(responses[0].error.includes('not configured'));
+
+  global.chrome.runtime.getManifest = original;
+});
+
+test('handleGoogleSignIn returns error when client_id is empty', () => {
+  const original = global.chrome.runtime.getManifest;
+  global.chrome.runtime.getManifest = () => ({ oauth2: { client_id: '' } });
+
+  const responses = [];
+  const result = handleGoogleSignIn((r) => responses.push(r));
+
+  assert.equal(result, false);
+  assert.equal(responses.length, 1);
+  assert.ok(responses[0].error.includes('not configured'));
+
+  global.chrome.runtime.getManifest = original;
+});
+
+test('handleGoogleSignIn returns error on chrome.runtime.lastError', async () => {
+  const originalGetManifest = global.chrome.runtime.getManifest;
+  global.chrome.runtime.getManifest = () => ({ oauth2: { client_id: 'real-client.apps.googleusercontent.com' } });
+
+  const originalIdentity = global.chrome.identity;
+  global.chrome.identity = {
+    getAuthToken: (_opts, cb) => {
+      global.chrome.runtime.lastError = { message: 'User denied access.' };
+      cb(null);
+      delete global.chrome.runtime.lastError;
+    },
+  };
+
+  const responses = [];
+  handleGoogleSignIn((r) => responses.push(r));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(responses.length, 1);
+  assert.equal(responses[0].error, 'User denied access.');
+
+  global.chrome.runtime.getManifest = originalGetManifest;
+  global.chrome.identity = originalIdentity;
+});
+
+test('handleGoogleSignIn returns error when token is null with no lastError', async () => {
+  const originalGetManifest = global.chrome.runtime.getManifest;
+  global.chrome.runtime.getManifest = () => ({ oauth2: { client_id: 'real-client.apps.googleusercontent.com' } });
+
+  const originalIdentity = global.chrome.identity;
+  global.chrome.identity = {
+    getAuthToken: (_opts, cb) => cb(null),
+  };
+
+  const responses = [];
+  handleGoogleSignIn((r) => responses.push(r));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.equal(responses.length, 1);
+  assert.ok(typeof responses[0].error === 'string');
+
+  global.chrome.runtime.getManifest = originalGetManifest;
+  global.chrome.identity = originalIdentity;
+});
+
+test('handleGoogleSignIn stores user and responds on successful fetch', async () => {
+  const originalGetManifest = global.chrome.runtime.getManifest;
+  global.chrome.runtime.getManifest = () => ({ oauth2: { client_id: 'real-client.apps.googleusercontent.com' } });
+
+  const originalIdentity = global.chrome.identity;
+  global.chrome.identity = {
+    getAuthToken: (_opts, cb) => cb('test-token-abc'),
+  };
+
+  const fakeUser = { id: 'u1', name: 'Alice', email: 'alice@example.com', picture: 'https://example.com/pic.jpg' };
+  global.fetch = async (url) => {
+    if (url.includes('userinfo')) {
+      return { ok: true, json: async () => fakeUser };
+    }
+    return { ok: false };
+  };
+
+  const stored = {};
+  const originalSet = global.chrome.storage.local.set;
+  global.chrome.storage.local.set = (data) => { Object.assign(stored, data); return Promise.resolve(); };
+
+  const responses = [];
+  handleGoogleSignIn((r) => responses.push(r));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  assert.equal(responses.length, 1);
+  assert.deepEqual(responses[0].user, { id: 'u1', name: 'Alice', email: 'alice@example.com', picture: 'https://example.com/pic.jpg' });
+  assert.deepEqual(stored.googleUser, { id: 'u1', name: 'Alice', email: 'alice@example.com', picture: 'https://example.com/pic.jpg' });
+
+  global.chrome.runtime.getManifest = originalGetManifest;
+  global.chrome.identity = originalIdentity;
+  global.chrome.storage.local.set = originalSet;
+  delete global.fetch;
+});
+
+test('handleGoogleSignIn returns error when userinfo fetch fails with non-ok status', async () => {
+  const originalGetManifest = global.chrome.runtime.getManifest;
+  global.chrome.runtime.getManifest = () => ({ oauth2: { client_id: 'real-client.apps.googleusercontent.com' } });
+
+  const originalIdentity = global.chrome.identity;
+  global.chrome.identity = {
+    getAuthToken: (_opts, cb) => cb('test-token'),
+  };
+
+  global.fetch = async () => ({ ok: false, status: 401 });
+
+  const responses = [];
+  handleGoogleSignIn((r) => responses.push(r));
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  assert.equal(responses.length, 1);
+  assert.ok(responses[0].error.includes('401'));
+
+  global.chrome.runtime.getManifest = originalGetManifest;
+  global.chrome.identity = originalIdentity;
+  delete global.fetch;
+});
+
+test('handleGoogleSignOut calls cleanup directly when no token available', async () => {
+  const originalIdentity = global.chrome.identity;
+  global.chrome.identity = {
+    getAuthToken: (_opts, cb) => {
+      global.chrome.runtime.lastError = { message: 'No token.' };
+      cb(null);
+      delete global.chrome.runtime.lastError;
+    },
+  };
+
+  let removedKey = null;
+  const originalRemove = global.chrome.storage.local.remove;
+  global.chrome.storage.local.remove = (key, cb) => { removedKey = key; cb(); };
+
+  await new Promise((resolve) => {
+    handleGoogleSignOut((response) => {
+      assert.equal(response.success, true);
+      assert.equal(removedKey, 'googleUser');
+      resolve();
+    });
+  });
+
+  global.chrome.identity = originalIdentity;
+  global.chrome.storage.local.remove = originalRemove;
+});
+
+test('handleGoogleSignOut revokes token and clears storage', async () => {
+  const originalIdentity = global.chrome.identity;
+  let revokeUrl = null;
+  global.fetch = async (url) => { revokeUrl = url; return { ok: true }; };
+
+  global.chrome.identity = {
+    getAuthToken: (_opts, cb) => cb('token-to-revoke'),
+    removeCachedAuthToken: (_opts, cb) => cb(),
+  };
+
+  let removedKey = null;
+  const originalRemove = global.chrome.storage.local.remove;
+  global.chrome.storage.local.remove = (key, cb) => { removedKey = key; cb(); };
+
+  await new Promise((resolve) => {
+    handleGoogleSignOut((response) => {
+      assert.equal(response.success, true);
+      assert.equal(removedKey, 'googleUser');
+      assert.ok(revokeUrl.includes('revoke'));
+      resolve();
+    });
+  });
+
+  global.chrome.identity = originalIdentity;
+  global.chrome.storage.local.remove = originalRemove;
+  delete global.fetch;
+});
+
+test('handleGetAuthState returns stored user when present', async () => {
+  const originalGet = global.chrome.storage.local.get;
+  global.chrome.storage.local.get = (key, cb) => cb({ googleUser: { id: 'u1', email: 'a@b.com' } });
+
+  await new Promise((resolve) => {
+    handleGetAuthState((response) => {
+      assert.deepEqual(response.user, { id: 'u1', email: 'a@b.com' });
+      resolve();
+    });
+  });
+
+  global.chrome.storage.local.get = originalGet;
+});
+
+test('handleGetAuthState returns null when no user is stored', async () => {
+  const originalGet = global.chrome.storage.local.get;
+  global.chrome.storage.local.get = (key, cb) => cb({});
+
+  await new Promise((resolve) => {
+    handleGetAuthState((response) => {
+      assert.equal(response.user, null);
+      resolve();
+    });
+  });
+
+  global.chrome.storage.local.get = originalGet;
 });
