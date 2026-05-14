@@ -142,7 +142,9 @@
     .ai-chat-toggle[aria-expanded="true"] { opacity: 0; pointer-events: none; transform: scale(0.95); }
     .ai-chat-sidebar { all: initial; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; position: fixed; right: 16px; bottom: 68px; width: 320px; max-width: calc(100vw - 24px); height: 420px; max-height: calc(100vh - 28px); border: 1px solid #e2e8f0; border-radius: 12px; background: #ffffff; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16), 0 2px 8px rgba(0, 0, 0, 0.08); display: none; flex-direction: column; overflow: hidden; pointer-events: auto; z-index: 2147483647; }
     .ai-chat-sidebar.visible { display: flex; animation: aiPanelSlideIn 0.2s ease-out; }
-    .ai-chat-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid #f1f5f9; }
+    .ai-chat-header { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid #f1f5f9; cursor: grab; }
+    .ai-chat-sidebar.dragging .ai-chat-header { cursor: grabbing; }
+    .ai-chat-sidebar.dragging { user-select: none; }
     .ai-chat-title { font-size: 13px; font-weight: 600; color: #0f172a; }
     .ai-chat-messages { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; background: #f8fafc; }
     .ai-chat-message { max-width: 92%; padding: 8px 10px; border-radius: 10px; font-size: 12.8px; line-height: 1.5; word-break: break-word; }
@@ -265,6 +267,17 @@
   const chatHint = chatSidebar.querySelector('.ai-chat-hint');
   const chatSrStatus = chatSidebar.querySelector('#ai-chat-sr-status');
   let chatPreviousFocus = null;
+
+  // Restore saved sidebar drag position
+  chrome.storage.local.get('chatSidebarPosition', ({ chatSidebarPosition }) => {
+    if (chatSidebarPosition && typeof chatSidebarPosition.left === 'number') {
+      const { left, top } = chatSidebarPosition;
+      chatSidebar.style.left = Math.max(0, Math.min(window.innerWidth - 320, left)) + 'px';
+      chatSidebar.style.top = Math.max(0, Math.min(window.innerHeight - 420, top)) + 'px';
+      chatSidebar.style.right = 'auto';
+      chatSidebar.style.bottom = 'auto';
+    }
+  });
 
   let loadedCustomActions = [];
   let selectedText = '';
@@ -1703,6 +1716,49 @@
       sendSidebarChatMessage();
     }
   });
+
+  // Drag-to-reposition for the sidebar chat
+  (function initSidebarDrag() {
+    const chatHeader = chatSidebar.querySelector('.ai-chat-header');
+    let dragging = false;
+    let startX = 0, startY = 0, startLeft = 0, startTop = 0;
+
+    chatHeader.addEventListener('mousedown', (e) => {
+      if (e.button !== 0 || e.target.closest('button')) return;
+      e.preventDefault();
+      const rect = chatSidebar.getBoundingClientRect();
+      startX = e.clientX;
+      startY = e.clientY;
+      startLeft = rect.left;
+      startTop = rect.top;
+      chatSidebar.style.left = startLeft + 'px';
+      chatSidebar.style.top = startTop + 'px';
+      chatSidebar.style.right = 'auto';
+      chatSidebar.style.bottom = 'auto';
+      dragging = true;
+      chatSidebar.classList.add('dragging');
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      const w = chatSidebar.offsetWidth;
+      const h = chatSidebar.offsetHeight;
+      const newLeft = Math.max(0, Math.min(window.innerWidth - w, startLeft + e.clientX - startX));
+      const newTop = Math.max(0, Math.min(window.innerHeight - h, startTop + e.clientY - startY));
+      chatSidebar.style.left = newLeft + 'px';
+      chatSidebar.style.top = newTop + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+      chatSidebar.classList.remove('dragging');
+      const rect = chatSidebar.getBoundingClientRect();
+      chrome.storage.local.set({
+        chatSidebarPosition: { left: rect.left, top: rect.top },
+      });
+    });
+  })();
 
   // Hide the floating menu whenever the page is scrolled.  The results panel
   // stays visible if a response is loading or already shown so the user can
