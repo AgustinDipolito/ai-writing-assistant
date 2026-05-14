@@ -1753,11 +1753,9 @@
       if (!dragging) return;
       dragging = false;
       chatSidebar.classList.remove('dragging');
+      const rect = chatSidebar.getBoundingClientRect();
       chrome.storage.local.set({
-        chatSidebarPosition: {
-          left: parseFloat(chatSidebar.style.left),
-          top: parseFloat(chatSidebar.style.top),
-        },
+        chatSidebarPosition: { left: rect.left, top: rect.top },
       });
     });
   })();
